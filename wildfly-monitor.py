@@ -203,22 +203,30 @@ def updateBeanStatistics(beanMonitor):
 def dispatchStatisticsToElasticSearch(beanMonitor):
     logger.info("Sending statistics for the bean %s to elasticsearch" % beanMonitor.getBeanName())
 
-    doc = {
-        'beanName': beanMonitor.getBeanName(),
-        'invocations': beanMonitor.getInvocationCount(),
-        'invocations-since-last-sample': beanMonitor.getInvocationsSinceLastSample(),
-        'invocations-pr-second': beanMonitor.getInvocationsPrSecond(),
-        'execution-time': beanMonitor.getExecutionTime(),
-        'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
-        'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
-        'sample-time': int(beanMonitor.getLastSampleTime()),
-        'timestamp': timestampMillisec64(),
-    }
+    try:
+        doc = {
+            'beanName': beanMonitor.getBeanName(),
+            'invocations': beanMonitor.getInvocationCount(),
+            'invocations-since-last-sample': beanMonitor.getInvocationsSinceLastSample(),
+            'invocations-pr-second': beanMonitor.getInvocationsPrSecond(),
+            'execution-time': beanMonitor.getExecutionTime(),
+            'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
+            'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
+            'sample-time': int(beanMonitor.getLastSampleTime()),
+            'timestamp': timestampMillisec64(),
+        }
 
-    logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
+        logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
 
-    res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
-    logger.debug("Received response from elasticsearch: {0}".format(res))
+        res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
+        logger.debug("Received response from elasticsearch: {0}".format(res))
+
+    except ConnectionError as conError:
+        logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
+        logger.error("The error: ", conError)
+    except Exception as exception:
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(esHostUrl))
+        logger.error("The exception: ", exception)
 
 # Start the main script here
 logger.info("Starting monitoring of %s" % wildflyHostUrl)
