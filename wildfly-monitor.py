@@ -51,10 +51,14 @@ esHostUrl = (esProtocol + '://' +
              esHost + ':' +
              esPort)
 
+# Initiate the elasticsearch client
 esClient = Elasticsearch(hosts=[{'host': esHost, 'port': esPort}])
 
 # Initiate a dictionary for holding the names of the beans that we will monitor	
 beanMonitors = dict()
+
+# Define how long the monitor should sleep, if it has some type of connection issue
+errorSleepTime = 20
 
 
 # Set up method to handle exit signal
@@ -174,11 +178,11 @@ def updateBeanNames():
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
         logger.error("The error: ", conError)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
         logger.error("The exception: ", exception)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
 
 
 def updateBeanStatistics(beanMonitor):
@@ -201,11 +205,11 @@ def updateBeanStatistics(beanMonitor):
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
         logger.error("The error: ", conError)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
         logger.error("The exception: ", exception)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
 
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
@@ -232,11 +236,11 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
         logger.error("The error: ", conError)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(esHostUrl))
         logger.error("The exception: ", exception)
-        time.sleep(5)
+        time.sleep(errorSleepTime)
 
 # Start the main script here
 logger.info("Starting monitoring of %s" % wildflyHostUrl)
@@ -257,6 +261,8 @@ if __name__ == "__main__":
                 updateBeanStatistics(value)
                 # Dispatch the stats to elasticsearch for the bean
                 dispatchStatisticsToElasticSearch(value)
+
+                time.sleep(0.1)
 
             # Take a nap
             time.sleep(5)
