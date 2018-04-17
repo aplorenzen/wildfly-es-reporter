@@ -157,11 +157,15 @@ def updateBeanNames():
     url = (wildflyBaseUrl +
            '/subsystem/ejb3/stateless-session-bean/')
     try:
+        logger.debug("Requesting all beans from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.debug("Received response from {0}: {1}".format(url, response))
+
         responseJson = response.json()
+        logger.debug("Response json: {1}".format(url, responseJson))
         beanNames = responseJson['stateless-session-bean'].keys()
 
-        logger.info("Found %d beans to monitor" % (len(beanNames)))
+        logger.info("Found {0} beans to monitor".format(len(beanNames)))
 
         for key in beanNames:
             if key not in beanMonitors.keys():
@@ -170,9 +174,11 @@ def updateBeanNames():
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
         logger.error("The error: ", conError)
+        time.sleep(5)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
         logger.error("The exception: ", exception)
+        time.sleep(5)
 
 
 def updateBeanStatistics(beanMonitor):
@@ -195,9 +201,11 @@ def updateBeanStatistics(beanMonitor):
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
         logger.error("The error: ", conError)
+        time.sleep(5)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
         logger.error("The exception: ", exception)
+        time.sleep(5)
 
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
@@ -224,9 +232,11 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
         logger.error("The error: ", conError)
+        time.sleep(5)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(esHostUrl))
         logger.error("The exception: ", exception)
+        time.sleep(5)
 
 # Start the main script here
 logger.info("Starting monitoring of %s" % wildflyHostUrl)
