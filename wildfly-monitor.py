@@ -58,13 +58,14 @@ beanMonitors = dict()
 
 
 # Set up method to handle exit signal
-def signal_handler(signal, frame):
-    logger.info("Received SIGINT, exiting gracefully...")
+def sigint_handler(signal, frame):
+    logger.info("Received SIGINT, exiting. Signal: {0} Frame: {1}".format(signal, frame))
     sys.exit(0)
 
 
-# Hook up the exit signal handler
-signal.signal(signal.SIGINT, signal_handler)
+def sigterm_handler(signal, frame):
+    logger.info("Received SIGTERM, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    sys.exit(0)
 
 
 def timestampMillisec64():
@@ -222,20 +223,28 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 # Start the main script here
 logger.info("Starting monitoring of %s" % wildflyHostUrl)
 
-try:
-    while True:
-        updateBeanNames()
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, sigterm_handler)
+    # Hook up the exit signal handler
+    signal.signal(signal.SIGINT, sigint_handler)
 
-        # Pull the bean status some stats
-        # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
-        for value in beanMonitors.values():
-            # Update the statistics for the bean
-            updateBeanStatistics(value)
-            # Dispatch the stats to elasticsearch for the bean
-            dispatchStatisticsToElasticSearch(value)
+    try:
+        while True:
+            updateBeanNames()
 
-        # Take a nap
-        time.sleep(5)
-except KeyboardInterrupt:
-    logger.info("Script interrupted by keyboard, exiting...")
-    sys.exit(0)
+            # Pull the bean status some stats
+            # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
+            for value in beanMonitors.values():
+                # Update the statistics for the bean
+                updateBeanStatistics(value)
+                # Dispatch the stats to elasticsearch for the bean
+                dispatchStatisticsToElasticSearch(value)
+
+            # Take a nap
+            time.sleep(5)
+    except KeyboardInterrupt:
+        logger.info("Script interrupted by keyboard, exiting...")
+        sys.exit(0)
+    finally:
+        logger.info("Exiting...")
+
