@@ -36,8 +36,8 @@ wildflyHostUrl = (wildflyProtocol + '://' +
                   wildflyPort)
 
 wildflyBaseUrl = (wildflyHostUrl +
-                 '/management/deployment/' + wildflyDeployment +
-                 '/subdeployment/' + wildflySubDeployment)
+                  '/management/deployment/' + wildflyDeployment +
+                  '/subdeployment/' + wildflySubDeployment)
 
 # Retrieve the environment variables that should be set to configure the Elasticsearch endpoint we are reporting to
 esProtocol = os.getenv('ES_PROTOCOL', 'http')
@@ -48,18 +48,20 @@ esDocType = os.getenv('ES_DOCTYPE', 'stats')
 
 # Compose the target Wildfly mangement HTTP endpoint that we are targeting
 esHostUrl = (esProtocol + '://' +
-                  esHost + ':' +
-                  esPort)
+             esHost + ':' +
+             esPort)
 
 esClient = Elasticsearch(hosts=[{'host': esHost, 'port': esPort}])
 
 # Initiate a dictionary for holding the names of the beans that we will monitor	
 beanMonitors = dict()
 
+
 # Set up method to handle exit signal
 def signal_handler(signal, frame):
     logger.info("Received SIGINT, exiting gracefully...")
     sys.exit(0)
+
 
 # Hook up the exit signal handler
 signal.signal(signal.SIGINT, signal_handler)
@@ -72,6 +74,11 @@ class BeanMonitor(object):
         self.beanName = beanName
         self.executionTime = 0
         self.invocationCount = 0
+        self.invocationsSinceLastSample = 0
+        self.executionTimeSinceLastSample = 0
+        self.invocationsDelta = 0
+        self.executionsDelta = 0
+        self.lastSampleTime = 0
 
     def getExecutionTime(self):
         return self.executionTime
@@ -87,6 +94,30 @@ class BeanMonitor(object):
 
     def getBeanName(self):
         return self.beanName
+
+    def getLastSampleTime(self):
+        return self.lastSampleTime
+
+    def updateStats(self, responseJson):
+        currentTimeInMilli = int(round(time.time() * 1000))
+
+        if self.lastSampleTime == 0:
+            self.lastSampleTime = currentTimeInMilli
+
+        deltaTime = currentTimeInMilli - self.lastSampleTime
+        logger.debug("deltatime %f", deltaTime)
+
+        self.invocationsSinceLastSample = responseJson["invocations"] - self.invocationCount
+        self.executionTimeSinceLastSample = responseJson["execution-time"] - self.executionTime
+
+        if deltaTime > 0:
+            self.invocationsDelta = self.invocationsSinceLastSample / deltaTime
+            self.executionsDelta = self.executionTimeSinceLastSample / deltaTime
+        else:
+            self.invocationsDelta = 0
+            self.executionsDelta = 0
+
+        self.lastSampleTime = currentTimeInMilli
 
 
 def updateBeanNames():
@@ -124,13 +155,15 @@ def updateBeanStatistics(beanMonitor):
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
         responseJson = response.json()
 
-        logger.debug("Setting executionTime on %s monitor to %s" %
-                     (beanMonitor.getBeanName(), responseJson["execution-time"]))
-        beanMonitor.setExecutionTime(responseJson["execution-time"])
+        # logger.debug("Setting executionTime on %s monitor to %s" %
+        #              (beanMonitor.getBeanName(), responseJson["execution-time"]))
+        # beanMonitor.setExecutionTime(responseJson["execution-time"])
 
-        logger.debug("Setting invocationCount on %s monitor to %s" %
-                     (beanMonitor.getBeanName(), responseJson["invocations"]))
-        beanMonitor.setInvocationCount(responseJson["invocations"])
+        # logger.debug("Setting invocationCount on %s monitor to %s" %
+        #              (beanMonitor.getBeanName(), responseJson["invocations"]))
+        # beanMonitor.setInvocationCount(responseJson["invocations"])
+
+        beanMonitor.updateStats(responseJson)
 
         # TODO: Need to add method level logging here, think of a good solution
 
@@ -140,6 +173,7 @@ def updateBeanStatistics(beanMonitor):
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
         logger.error("The exception: ", exception)
+
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
     logger.info("Sending statistics for the bean %s to elasticsearch" % beanMonitor.getBeanName())
@@ -167,20 +201,14 @@ try:
             updateBeanStatistics(value)
             dispatchStatisticsToElasticSearch(value)
 
-
-
         # print(value.getExecutionTime())
 
         # report the stats
-
 
         time.sleep(10)
 except KeyboardInterrupt:
     logger.info("Script interrupted by keyboard, exiting...")
     sys.exit(0)
-
-
-
 
 # for value in beanMonitors.values():
 #    print(value.getExecutionTime())
