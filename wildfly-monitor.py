@@ -67,6 +67,10 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
+def timestampMillisec64():
+    return int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+
 # BeanMonitor is the class that we will use for holding information about a bean
 #   that we are monitoring.
 class BeanMonitor(object):
@@ -98,21 +102,46 @@ class BeanMonitor(object):
     def getLastSampleTime(self):
         return self.lastSampleTime
 
+    def getInvocationsSinceLastSample(self):
+        return self.invocationsSinceLastSample
+
+    def getExecutionTimeSinceLastSample(self):
+        return self.executionTimeSinceLastSample
+
+    def getInvocationsPrSecond(self):
+        return self.invocationsDelta
+
+    def getExecutionsPrSecond(self):
+        return self.executionsDelta
+
     def updateStats(self, responseJson):
-        currentTimeInMilli = int(round(time.time() * 1000))
+        currentTimeInMilli = timestampMillisec64()
+
+        # int(round(time.time() * 1000))
 
         if self.lastSampleTime == 0:
             self.lastSampleTime = currentTimeInMilli
 
         deltaTime = currentTimeInMilli - self.lastSampleTime
-        logger.debug("deltatime %f", deltaTime)
+        logger.debug("Bean {0}, deltaTime: {1}".format(self.beanName, deltaTime))
 
+        logger.debug("Bean {0}, self.invocationCount: {1}".format(self.beanName, self.invocationCount))
+        logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.beanName, responseJson["invocations"]))
         self.invocationsSinceLastSample = responseJson["invocations"] - self.invocationCount
+        logger.debug("Bean {0}, invocationsSinceLastSample: {1}".format(self.beanName, self.invocationsSinceLastSample))
+
+        logger.debug("Bean {0}, self.executionTime: {1}".format(self.beanName, self.executionTime))
+        logger.debug(
+            "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.beanName, responseJson["execution-time"]))
         self.executionTimeSinceLastSample = responseJson["execution-time"] - self.executionTime
+        logger.debug(
+            "Bean {0}, executionTimeSinceLastSample: {1}".format(self.beanName, self.executionTimeSinceLastSample))
 
         if deltaTime > 0:
-            self.invocationsDelta = self.invocationsSinceLastSample / deltaTime
-            self.executionsDelta = self.executionTimeSinceLastSample / deltaTime
+            self.invocationsDelta = self.invocationsSinceLastSample / (deltaTime / 1000)
+            logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsDelta))
+            self.executionsDelta = self.executionTimeSinceLastSample / (deltaTime / 1000)
+            logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionsDelta))
         else:
             self.invocationsDelta = 0
             self.executionsDelta = 0
@@ -152,16 +181,11 @@ def updateBeanStatistics(beanMonitor):
            % beanMonitor.getBeanName())
 
     try:
+        logger.debug("Requesting bean statistics from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.debug("Received response from {0}: {1}".format(url, response))
         responseJson = response.json()
-
-        # logger.debug("Setting executionTime on %s monitor to %s" %
-        #              (beanMonitor.getBeanName(), responseJson["execution-time"]))
-        # beanMonitor.setExecutionTime(responseJson["execution-time"])
-
-        # logger.debug("Setting invocationCount on %s monitor to %s" %
-        #              (beanMonitor.getBeanName(), responseJson["invocations"]))
-        # beanMonitor.setInvocationCount(responseJson["invocations"])
+        logger.debug("Response json: {1}".format(url, responseJson))
 
         beanMonitor.updateStats(responseJson)
 
@@ -179,14 +203,21 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
     logger.info("Sending statistics for the bean %s to elasticsearch" % beanMonitor.getBeanName())
 
     doc = {
-        'author': 'kimchy',
-        'text': 'Elasticsearch: cool. bonsai cool.',
-        'timestamp': datetime.now(),
+        'beanName': beanMonitor.getBeanName(),
+        'invocations': beanMonitor.getInvocationCount(),
+        'invocations-since-last-sample': beanMonitor.getInvocationsSinceLastSample(),
+        'invocations-pr-second': beanMonitor.getInvocationsPrSecond(),
+        'execution-time': beanMonitor.getExecutionTime(),
+        'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
+        'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
+        'sample-time': int(beanMonitor.getLastSampleTime()),
+        'timestamp': timestampMillisec64(),
     }
 
-    res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
-    print(res)
+    logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
 
+    res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
+    logger.debug("Received response from elasticsearch: {0}".format(res))
 
 # Start the main script here
 logger.info("Starting monitoring of %s" % wildflyHostUrl)
@@ -198,17 +229,13 @@ try:
         # Pull the bean status some stats
         # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
         for value in beanMonitors.values():
+            # Update the statistics for the bean
             updateBeanStatistics(value)
+            # Dispatch the stats to elasticsearch for the bean
             dispatchStatisticsToElasticSearch(value)
 
-        # print(value.getExecutionTime())
-
-        # report the stats
-
-        time.sleep(10)
+        # Take a nap
+        time.sleep(5)
 except KeyboardInterrupt:
     logger.info("Script interrupted by keyboard, exiting...")
     sys.exit(0)
-
-# for value in beanMonitors.values():
-#    print(value.getExecutionTime())
