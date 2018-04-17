@@ -10,7 +10,14 @@ from elasticsearch import Elasticsearch
 
 # From: https://docs.python.org/3/howto/logging-cookbook.html
 logger = logging.getLogger('wildfly-monitor')
-logger.setLevel(logging.DEBUG)
+logLevelString = os.getenv('LOG_LEVEL', 'INFO')
+
+logLevel = logging.getLevelName(logLevelString)
+
+if logLevel is None:
+    logLevel = logging.INFO
+
+logger.setLevel(logLevel)
 
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -157,9 +164,11 @@ class BeanMonitor(object):
 def updateBeanNames():
     global beanMonitors
 
-    logger.info('Updating all bean names')
     url = (wildflyBaseUrl +
-           '/subsystem/ejb3/stateless-session-bean/')
+           "/subsystem/ejb3/stateless-session-bean/")
+
+    logger.info("Updating all bean names from {0}".format(url))
+
     try:
         logger.debug("Requesting all beans from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
@@ -176,17 +185,17 @@ def updateBeanNames():
                 beanMonitors[key] = BeanMonitor(key)
 
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
+        logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
 def updateBeanStatistics(beanMonitor):
-    logger.info("Getting statistics for the bean %s" % beanMonitor.getBeanName())
+    logger.info("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
     url = (wildflyBaseUrl +
            "/subsystem/ejb3/stateless-session-bean/%s/read-resource?include-runtime=true&recursive=true"
            % beanMonitor.getBeanName())
@@ -203,17 +212,17 @@ def updateBeanStatistics(beanMonitor):
         # TODO: Need to add method level logging here, think of a good solution
 
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the host %s" % wildflyHostUrl)
+        logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host %s" % wildflyHostUrl)
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
-    logger.info("Sending statistics for the bean %s to elasticsearch" % beanMonitor.getBeanName())
+    logger.info("Sending statistics for the bean {0}".format(beanMonitor.getBeanName()))
 
     try:
         doc = {
@@ -243,7 +252,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
         time.sleep(errorSleepTime)
 
 # Start the main script here
-logger.info("Starting monitoring of %s" % wildflyHostUrl)
+logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, sigterm_handler)
