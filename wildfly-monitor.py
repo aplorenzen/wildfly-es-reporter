@@ -195,7 +195,7 @@ def updateBeanNames():
 
 
 def updateBeanStatistics(beanMonitor):
-    logger.info("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
+    logger.debug("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
     url = (wildflyBaseUrl +
            "/subsystem/ejb3/stateless-session-bean/{0}/read-resource?include-runtime=true&recursive=true"
            .format(beanMonitor.getBeanName()))
@@ -222,7 +222,7 @@ def updateBeanStatistics(beanMonitor):
 
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
-    logger.info("Sending statistics for the bean {0}".format(beanMonitor.getBeanName()))
+    logger.debug("Sending statistics for the bean {0}".format(beanMonitor.getBeanName()))
 
     try:
         doc = {
@@ -253,7 +253,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 
 
 def updateDeploymentUpStatus():
-    logger.info("Getting server upstatus from {0}".format(wildflyBaseUrl))
+    logger.debug("Getting server upstatus from {0}".format(wildflyBaseUrl))
     url = (wildflyBaseUrl +
            '/management/deployment/' + wildflyDeployment +
            "/read-attribute?name=status")
@@ -277,19 +277,24 @@ def updateDeploymentUpStatus():
 
 
 scriptStartTime = time.time()
+lastBeanNameUpdateTime = 0;
 
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
 logger.info("Shipping statistics to {0}".format(esHostUrl))
 
 if __name__ == "__main__":
+    # Hook up the exit signal handlers for SIGTERM and SIGINT
     signal.signal(signal.SIGTERM, sigterm_handler)
-    # Hook up the exit signal handler
     signal.signal(signal.SIGINT, sigint_handler)
 
     try:
         while True:
-            updateBeanNames()
+
+            # Update bean names every hour, in case of a deploy with new beans
+            if (time.time() - lastBeanNameUpdateTime) > 3600:
+                updateBeanNames()
+                lastBeanNameUpdateTime = time.time()
 
             # Pull the bean status some stats
             # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
@@ -298,10 +303,12 @@ if __name__ == "__main__":
                 updateBeanStatistics(value)
                 # Dispatch the stats to elasticsearch for the bean
                 dispatchStatisticsToElasticSearch(value)
-
+                # Take a powernap, before doing the next poll
                 time.sleep(0.1)
 
-            # Take a nap
+
+
+            # Take a nap before doing the next full poll cycle
             time.sleep(5)
     except KeyboardInterrupt:
         logger.info("Script interrupted by keyboard, exiting...")
