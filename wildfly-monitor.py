@@ -264,7 +264,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
             'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
             'sample-time': int(beanMonitor.getLastSampleTime()),
-            'time': datetime.utcnow().isoformat(" ", "milliseconds"),
+            'date': datetime.utcnow().isoformat(" ", "milliseconds"),
         }
 
         logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
