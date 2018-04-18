@@ -196,10 +196,12 @@ def updateBeanNames(beanMonitors):
 
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
@@ -227,11 +229,13 @@ def updateBeanStatistics(beanMonitor):
         # TODO: Need to add method level logging here, think of a good solution
 
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl))
+        logger.error("A ConnectionError occurred when getting bean statistics for {0}, connecting to the host {1}".format(beanMonitor.getBeanName(), wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.error("An error occurred when retrieving bean statistics for the bean {0}, from the wildfly host {1}".format(beanMonitor.getBeanName(), wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
@@ -263,10 +267,12 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(esHostUrl))
+        logger.error("An error occurred when pushing statistics to elasticsearch at {0}".format(esHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
@@ -292,10 +298,12 @@ def updateDeploymentUpStatus():
         # TODO: Store the result somewhere before dispatching to ES
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the wildfly host {0}".format(wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.info("Sleeping {0}...".format(errorSleepTime))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
