@@ -355,7 +355,7 @@ def waitForWildflyToBeUp():
     url = (wildflyHostUrl +
            "/management/deployment/" + wildflyDeployment +
            "/read-attribute?name=status")
-           # http: // localhost:9990 / management / deployment / etel.ear / read-attribute?name=status
+
     while not wildflyUp:
         try:
             logger.info("Waiting for wildfly instance at {0} to be available".format(wildflyHostUrl))
@@ -376,19 +376,25 @@ def waitForWildflyToBeUp():
             pass
 
 
-
 def waitForElasticsearchToBeUp():
     elasticsearchUp = False
+
+    url = (esHostUrl + "/?pretty")
 
     while not elasticsearchUp:
         try:
             logger.info("Waiting for elasticseach instance at {0} to be available".format(esHostUrl))
 
-            logger.debug("Checking if elasticseach at {0} is available".format(esHostUrl))
+            logger.debug("Requesting status from {0}".format(url))
+            response = requests.get(url)
 
-            if esClient.ping:
+            if response.status_code == requests.codes.ok:
                 elasticsearchUp = True
                 logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
+
+            # if esClient.ping:
+            #    elasticsearchUp = True
+            #    logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
 
             if not elasticsearchUp:
                 logger.debug("Was not able to reach the elasticsearch instance at {0}, napping for 2 seconds...".format(esHostUrl))
