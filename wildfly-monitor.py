@@ -266,7 +266,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'time': datetime.utcnow().isoformat(" ", "milliseconds"),
         }
 
-        logger.info("Dispaching document to elasticsearch: {0}".format(doc))
+        logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
 
         res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
         logger.debug("Received response from elasticsearch: {0}".format(res))
@@ -372,7 +372,9 @@ def waitForWildflyToBeUp():
                 time.sleep(2)
 
         except Exception as exception:
-            logger.error("Unable to reach wildfly instance at {0}".format(wildflyHostUrl))
+            logger.debug("Unable to reach wildfly instance at {0}".format(wildflyHostUrl))
+            pass
+
 
 
 def waitForElasticsearchToBeUp():
@@ -393,7 +395,8 @@ def waitForElasticsearchToBeUp():
                 time.sleep(2)
 
         except Exception as exception:
-            logger.error("Unable to reach wildfly instance at {0}".format(esHostUrl))
+            logger.debug("Unable to reach wildfly instance at {0}".format(esHostUrl))
+            pass
 
 
 # Start the main script here
