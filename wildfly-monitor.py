@@ -8,7 +8,7 @@ import os
 import sys
 from elasticsearch import Elasticsearch
 
-monitorName = os.getenv("MONITOR_NAME", "'wildfly-monitor")
+monitorName = os.getenv("MONITOR_NAME", "wildfly-monitor")
 
 # From: https://docs.python.org/3/howto/logging-cookbook.html
 logger = logging.getLogger(monitorName)
@@ -263,7 +263,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
             'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
             'sample-time': int(beanMonitor.getLastSampleTime()),
-            'time': datetime.utcnow().isoformat(" ", datetime.microsecond),
+            'time': datetime.utcnow().isoformat(" ", "milliseconds"),
         }
 
         logger.info("Dispaching document to elasticsearch: {0}".format(doc))
@@ -358,13 +358,14 @@ def waitForWildflyToBeUp():
            # http: // localhost:9990 / management / deployment / etel.ear / read-attribute?name=status
     while not wildflyUp:
         try:
-            logger.debug("Checking if wildfly instance at {0} is available".format(wildflyHostUrl))
+            logger.info("Waiting for wildfly instance at {0} to be available".format(wildflyHostUrl))
             logger.debug("Requesting status from {0}".format(url))
 
             response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
 
             if response.status_code == requests.codes.ok:
                 wildflyUp = True
+                logger.info("Wildfly instance at {0} is ready".format(wildflyHostUrl))
 
             if not wildflyUp:
                 logger.debug("Was not able to reach the wildfly instance at {0}, napping for 2 seconds...".format(url))
@@ -377,21 +378,22 @@ def waitForWildflyToBeUp():
 def waitForElasticsearchToBeUp():
     elasticsearchUp = False
 
-    url = esHostUrl
-
     while not elasticsearchUp:
         try:
-            logger.debug("Checking if elasticseach at {0} is available".format(url))
+            logger.info("Waiting for elasticseach instance at {0} to be available".format(esHostUrl))
+
+            logger.debug("Checking if elasticseach at {0} is available".format(esHostUrl))
 
             if esClient.ping:
                 elasticsearchUp = True
+                logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
 
             if not elasticsearchUp:
-                logger.debug("Was not able to reach the elasticsearch instance at {0}, napping for 2 seconds...".format(url))
+                logger.debug("Was not able to reach the elasticsearch instance at {0}, napping for 2 seconds...".format(esHostUrl))
                 time.sleep(2)
 
         except Exception as exception:
-            logger.error("Unable to reach wildfly instance at {0}".format(wildflyHostUrl))
+            logger.error("Unable to reach wildfly instance at {0}".format(esHostUrl))
 
 
 # Start the main script here
