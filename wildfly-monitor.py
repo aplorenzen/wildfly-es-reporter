@@ -263,10 +263,10 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
             'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
             'sample-time': int(beanMonitor.getLastSampleTime()),
-            'time': datetime.utcnow().isoformat(" "),
+            'time': datetime.utcnow().isoformat(" ", datetime.microsecond),
         }
 
-        logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
+        logger.info("Dispaching document to elasticsearch: {0}".format(doc))
 
         res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
         logger.debug("Received response from elasticsearch: {0}".format(res))
@@ -404,7 +404,6 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, sigint_handler)
 
     # Need to check that the wildfly instance and elasticsearch instances are available
-
     waitForWildflyToBeUp()
     waitForElasticsearchToBeUp()
 
