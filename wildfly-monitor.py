@@ -140,15 +140,15 @@ class BeanMonitor(object):
         return self.executionsDelta
 
     def updateStats(self, responseJson):
-        currentTimeInMilli = timestampMillisec64()
-
+        # currentTimeInMilli = timestampMillisec64()
+        sampleTime = datetime.utcnow()
         # int(round(time.time() * 1000))
 
         if self.lastSampleTime == 0:
-            self.lastSampleTime = currentTimeInMilli
+            self.lastSampleTime = sampleTime
 
-        deltaTime = currentTimeInMilli - self.lastSampleTime
-        logger.debug("Bean {0}, deltaTime: {1}".format(self.beanName, deltaTime))
+        deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
+        logger.debug("Bean {0}, deltaTime: {1} ms".format(self.beanName, deltaTimeMilliseconds))
 
         logger.debug("Bean {0}, self.invocationCount: {1}".format(self.beanName, self.invocationCount))
         logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.beanName, responseJson["invocations"]))
@@ -162,16 +162,17 @@ class BeanMonitor(object):
         logger.debug(
             "Bean {0}, executionTimeSinceLastSample: {1}".format(self.beanName, self.executionTimeSinceLastSample))
 
-        if deltaTime > 0:
-            self.invocationsDelta = self.invocationsSinceLastSample / (deltaTime / 1000)
+        if deltaTimeMilliseconds > 0:
+            # Calculate delta in pr. minute (millisecs / 60 / 1000)
+            self.invocationsDelta = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 60 / 1000)
             logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsDelta))
-            self.executionsDelta = self.executionTimeSinceLastSample / (deltaTime / 1000)
+            self.executionsDelta = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 60 / 1000)
             logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionsDelta))
         else:
             self.invocationsDelta = 0
             self.executionsDelta = 0
 
-        self.lastSampleTime = currentTimeInMilli
+        self.lastSampleTime = sampleTime
 
 
 def updateBeanNames(beanMonitors):
@@ -263,8 +264,8 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'execution-time': beanMonitor.getExecutionTime(),
             'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
             'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
-            'sample-time': int(beanMonitor.getLastSampleTime()),
-            'date': datetime.utcnow().isoformat("T", "milliseconds"),
+            'sample-time': beanMonitor.getLastSampleTime().isoformat("T", "milliseconds"),
+            'timestamp': datetime.utcnow().isoformat("T", "milliseconds"),
         }
 
         logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
