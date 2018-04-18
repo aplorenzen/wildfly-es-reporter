@@ -197,8 +197,8 @@ def updateBeanNames():
 def updateBeanStatistics(beanMonitor):
     logger.info("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
     url = (wildflyBaseUrl +
-           "/subsystem/ejb3/stateless-session-bean/%s/read-resource?include-runtime=true&recursive=true"
-           % beanMonitor.getBeanName())
+           "/subsystem/ejb3/stateless-session-bean/{0}/read-resource?include-runtime=true&recursive=true"
+           .format(beanMonitor.getBeanName()))
 
     try:
         logger.debug("Requesting bean statistics from {0}".format(url))
@@ -250,6 +250,32 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
         logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(esHostUrl))
         logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
+
+
+def updateDeploymentUpStatus():
+    logger.info("Getting server upstatus from {0}".format(wildflyBaseUrl))
+    url = (wildflyBaseUrl +
+           '/management/deployment/' + wildflyDeployment +
+           "/read-attribute?name=status")
+
+    try:
+        logger.debug("Requesting deployment upstatus from {0}".format(url))
+        response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.debug("Received response from {0}: {1}".format(url, response))
+        responseJson = response.json()
+        logger.debug("Response json: {1}".format(url, responseJson))
+
+        # TODO: Store the result somewhere before dispatching to ES
+    except ConnectionError as conError:
+        logger.error("A ConnectionError occurred when connecting to the wildfly host {0}".format(wildflyHostUrl))
+        logger.error("The error: ", conError)
+        time.sleep(errorSleepTime)
+    except Exception as exception:
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.error("The exception: ", exception)
+        time.sleep(errorSleepTime)
+
+
 
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
