@@ -276,9 +276,11 @@ def updateDeploymentUpStatus():
         time.sleep(errorSleepTime)
 
 
+scriptStartTime = time.time()
 
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
+logger.info("Shipping statistics to {0}".format(esHostUrl))
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, sigterm_handler)
@@ -305,5 +307,15 @@ if __name__ == "__main__":
         logger.info("Script interrupted by keyboard, exiting...")
         sys.exit(0)
     finally:
+        scriptEndTime = time.time()
+        days = divmod(scriptEndTime - scriptStartTime, 86400)
+        hours = divmod(days[1], 3600)
+        minutes = divmod(hours[1], 60)
+        seconds = divmod(minutes[1], 1)
         logger.info("Exiting...")
+        logger.info("Uptime was {0:.0f} days, {1:.0f} hours, {2:.0f} minutes and {3:.0f} seconds"
+                    .format(days[0], hours[0], minutes[0], seconds[0]))
+
+
+
 
