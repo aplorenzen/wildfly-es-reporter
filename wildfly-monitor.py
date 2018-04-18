@@ -74,6 +74,7 @@ beanMonitors = dict()
 
 # Define how long the monitor should sleep, if it has some type of connection issue
 errorSleepTime = 20
+upstatusCheckSleepTime = 10
 
 # Set up global request counters
 wildflyRequestCounter = 0
@@ -368,11 +369,12 @@ def waitForWildflyToBeUp():
                 logger.info("Wildfly instance at {0} is ready".format(wildflyHostUrl))
 
             if not wildflyUp:
-                logger.debug("Was not able to reach the wildfly instance at {0}, napping for 2 seconds...".format(url))
-                time.sleep(2)
+                logger.warning("Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url, upstatusCheckSleepTime))
+                time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
-            logger.debug("Unable to reach wildfly instance at {0}".format(wildflyHostUrl))
+            logger.warning("Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url, upstatusCheckSleepTime))
+            time.sleep(upstatusCheckSleepTime)
             pass
 
 
@@ -397,11 +399,12 @@ def waitForElasticsearchToBeUp():
             #    logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
 
             if not elasticsearchUp:
-                logger.debug("Was not able to reach the elasticsearch instance at {0}, napping for 2 seconds...".format(esHostUrl))
-                time.sleep(2)
+                logger.warning("Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl, upstatusCheckSleepTime))
+                time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
-            logger.debug("Unable to reach wildfly instance at {0}".format(esHostUrl))
+            logger.warning("Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl, upstatusCheckSleepTime))
+            time.sleep(upstatusCheckSleepTime)
             pass
 
 
