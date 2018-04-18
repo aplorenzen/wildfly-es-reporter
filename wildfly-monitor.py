@@ -322,13 +322,18 @@ def printRequestStatistics():
     lastRequestStatsReportTime = time.time()
 
 
+def getMinutesAndSecondsDiff(startTime, endTime):
+    minutes = divmod(endTime - startTime, 60)
+    seconds = divmod(minutes[1], 1)
+    return "{0:.0f} minutes and {1:.0f} seconds".format(minutes[0], seconds[0])
+
+
 def getUptime():
     days = divmod(time.time() - scriptStartTime, 86400)
     hours = divmod(days[1], 3600)
     minutes = divmod(hours[1], 60)
     seconds = divmod(minutes[1], 1)
-    return "{0:.0f} days, {1:.0f} hours, {2:.0f} minutes and {3:.0f} seconds"\
-        .format(days[0], hours[0], minutes[0], seconds[0])
+    return "{0:.0f} days, {1:.0f} hours, {2:.0f} minutes and {3:.0f} seconds".format(days[0], hours[0], minutes[0], seconds[0])
 
 
 def logUptimeStatistics():
@@ -352,6 +357,10 @@ if __name__ == "__main__":
                 updateBeanNames(beanMonitors)
                 lastBeanNameUpdateTime = time.time()
 
+            logger.info("Running bean statistics collection and dispatch for {0} beans".format(len(beanMonitors)))
+
+            beanStatisticsCollectionStartTime = time.time()
+
             # Pull the bean status some stats
             # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
             for value in beanMonitors.values():
@@ -361,6 +370,11 @@ if __name__ == "__main__":
                 dispatchStatisticsToElasticSearch(value)
                 # Take a powernap, before doing the next poll
                 time.sleep(0.1)
+
+            beanStatisticsCollectionEndTime = time.time()
+
+            logger.info("Collected statistics for {0} beans in {1}".format(len(beanMonitors), getMinutesAndSecondsDiff(
+                beanStatisticsCollectionStartTime, beanStatisticsCollectionEndTime)))
 
             # Report request stats every 5 minutes
             if (time.time() - lastRequestStatsReportTime) > 300:
@@ -372,12 +386,12 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Script interrupted by keyboard, exiting...")
         sys.exit(0)
+    except Exception as exception:
+        logger.info("Exception in the main loop, exiting...")
+        logger.error("The exception: ", exception)
+        sys.exit(0)
     finally:
         scriptEndTime = time.time()
-        days = divmod(scriptEndTime - scriptStartTime, 86400)
-        hours = divmod(days[1], 3600)
-        minutes = divmod(hours[1], 60)
-        seconds = divmod(minutes[1], 1)
         logger.info("Exiting...")
         logger.info("Uptime was {0}".format(getUptime()))
 
