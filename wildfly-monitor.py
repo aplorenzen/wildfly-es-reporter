@@ -28,6 +28,11 @@ ch.setFormatter(formatter)
 # add the handlers to the logger
 logger.addHandler(ch)
 
+scriptStartTime = time.time()
+lastBeanNameUpdateTime = 0
+# Set last stats reports time to be 5 minutes in the future
+lastRequestStatsReportTime = time.time() + 300
+
 # Retrieve the environment variables that should be set to configure the Wildfly endpoint to monitor
 wildflyProtocol = os.getenv('WILDFLY_PROTOCOL', 'http')
 wildflyHost = os.getenv('WILDFLY_HOST', 'localhost')
@@ -67,6 +72,9 @@ beanMonitors = dict()
 # Define how long the monitor should sleep, if it has some type of connection issue
 errorSleepTime = 20
 
+# Set up global request counters
+wildflyRequestCounter = 0
+esRequestCounter = 0
 
 # Set up method to handle exit signal
 def sigint_handler(signal, frame):
@@ -161,8 +169,8 @@ class BeanMonitor(object):
         self.lastSampleTime = currentTimeInMilli
 
 
-def updateBeanNames():
-    global beanMonitors
+def updateBeanNames(beanMonitors):
+    global wildflyRequestCounter
 
     url = (wildflyBaseUrl +
            "/subsystem/ejb3/stateless-session-bean/")
@@ -173,6 +181,8 @@ def updateBeanNames():
         logger.debug("Requesting all beans from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
         logger.debug("Received response from {0}: {1}".format(url, response))
+
+        wildflyRequestCounter += 1
 
         responseJson = response.json()
         logger.debug("Response json: {1}".format(url, responseJson))
@@ -195,6 +205,8 @@ def updateBeanNames():
 
 
 def updateBeanStatistics(beanMonitor):
+    global wildflyRequestCounter
+
     logger.debug("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
     url = (wildflyBaseUrl +
            "/subsystem/ejb3/stateless-session-bean/{0}/read-resource?include-runtime=true&recursive=true"
@@ -204,6 +216,9 @@ def updateBeanStatistics(beanMonitor):
         logger.debug("Requesting bean statistics from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
         logger.debug("Received response from {0}: {1}".format(url, response))
+
+        wildflyRequestCounter += 1
+
         responseJson = response.json()
         logger.debug("Response json: {1}".format(url, responseJson))
 
@@ -222,6 +237,8 @@ def updateBeanStatistics(beanMonitor):
 
 
 def dispatchStatisticsToElasticSearch(beanMonitor):
+    global esRequestCounter
+
     logger.debug("Sending statistics for the bean {0}".format(beanMonitor.getBeanName()))
 
     try:
@@ -242,6 +259,8 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
         res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
         logger.debug("Received response from elasticsearch: {0}".format(res))
 
+        esRequestCounter += 1
+
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
         logger.error("The error: ", conError)
@@ -253,6 +272,8 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 
 
 def updateDeploymentUpStatus():
+    global wildflyRequestCounter
+
     logger.debug("Getting server upstatus from {0}".format(wildflyBaseUrl))
     url = (wildflyBaseUrl +
            '/management/deployment/' + wildflyDeployment +
@@ -262,6 +283,9 @@ def updateDeploymentUpStatus():
         logger.debug("Requesting deployment upstatus from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
         logger.debug("Received response from {0}: {1}".format(url, response))
+
+        wildflyRequestCounter += 1
+
         responseJson = response.json()
         logger.debug("Response json: {1}".format(url, responseJson))
 
@@ -276,8 +300,32 @@ def updateDeploymentUpStatus():
         time.sleep(errorSleepTime)
 
 
-scriptStartTime = time.time()
-lastBeanNameUpdateTime = 0;
+def printRequestStatistics():
+    global lastRequestStatsReportTime
+
+    wildflyRequestAverage = (wildflyRequestCounter / (time.time() - scriptStartTime)) / 3600
+    esRequestAverage = (esRequestCounter / (time.time() - scriptStartTime)) / 3600
+
+    logger.info("Processed a total of {0} wildfly requests, average {1} pr. hour"
+        .format(wildflyRequestCounter, wildflyRequestAverage))
+    logger.info("Processed a total of {0} elasticsearch requests, average {1} pr. hour"
+        .format(esRequestCounter, esRequestAverage))
+
+    lastRequestStatsReportTime = time.time()
+
+
+def getUptime():
+    days = divmod(time.time() - scriptStartTime, 86400)
+    hours = divmod(days[1], 3600)
+    minutes = divmod(hours[1], 60)
+    seconds = divmod(minutes[1], 1)
+    return "{0:.0f} days, {1:.0f} hours, {2:.0f} minutes and {3:.0f} seconds"\
+        .format(days[0], hours[0], minutes[0], seconds[0])
+
+
+def logUptimeStatistics():
+    logger.info("Uptime is {0}".format(getUptime()))
+
 
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
@@ -293,7 +341,7 @@ if __name__ == "__main__":
 
             # Update bean names every hour, in case of a deploy with new beans
             if (time.time() - lastBeanNameUpdateTime) > 3600:
-                updateBeanNames()
+                updateBeanNames(beanMonitors)
                 lastBeanNameUpdateTime = time.time()
 
             # Pull the bean status some stats
@@ -306,10 +354,13 @@ if __name__ == "__main__":
                 # Take a powernap, before doing the next poll
                 time.sleep(0.1)
 
-
+            # Report request stats every 5 minutes
+            if (time.time() - lastRequestStatsReportTime) > 300:
+                printRequestStatistics()
 
             # Take a nap before doing the next full poll cycle
             time.sleep(5)
+
     except KeyboardInterrupt:
         logger.info("Script interrupted by keyboard, exiting...")
         sys.exit(0)
@@ -320,9 +371,7 @@ if __name__ == "__main__":
         minutes = divmod(hours[1], 60)
         seconds = divmod(minutes[1], 1)
         logger.info("Exiting...")
-        logger.info("Uptime was {0:.0f} days, {1:.0f} hours, {2:.0f} minutes and {3:.0f} seconds"
-                    .format(days[0], hours[0], minutes[0], seconds[0]))
-
+        logger.info("Uptime was {0}".format(getUptime()))
 
 
 
