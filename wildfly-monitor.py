@@ -1,5 +1,6 @@
 # TODO: Downgrade logging to the TRACE level
-# TODO: Update the monitor so that it does not have to send updates when there are not changes in the beans
+# DONE: Update the monitor so that it does not have to send updates when there are not changes in the beans
+# TODO: Update the monitor to report methodlevel stats
 
 from datetime import datetime
 import signal
@@ -18,7 +19,6 @@ logger = logging.getLogger(monitorName)
 
 # Introduce TRACE logging level
 TRACE = 5
-
 logging.addLevelName(TRACE, "TRACE")
 logLevelString = os.getenv('LOG_LEVEL', 'INFO')
 
@@ -115,6 +115,8 @@ class BeanMonitor(object):
         self.invocationsPerSecond = 0
         self.executionTimePerSecond = 0
         self.lastSampleTime = 0
+        self.reportToElasticsearch = False
+        self.lastResponse = ""
 
     def getExecutionTime(self):
         return self.executionTime
@@ -146,39 +148,62 @@ class BeanMonitor(object):
     def getExecutionsPerSecond(self):
         return self.executionTimePerSecond
 
+    def shouldReportToElasticsearch(self):
+        return self.reportToElasticsearch
+
+    def getLastResponse(self):
+        return self.lastResponse
+
     def updateStats(self, responseJson):
         sampleTime = datetime.utcnow()
 
+        self.lastResponse = responseJson
+
+        # If we are in the first pass for this bean, do not calc the avareges and so on
         if self.lastSampleTime == 0:
+            self.reportToElasticsearch = True
             self.lastSampleTime = sampleTime
+            self.executionTime = responseJson["execution-time"]
+            self.invocationCount = responseJson["invocations"]
+            return
 
-        deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
-        logger.debug("Bean {0}, deltaTime: {1} ms".format(self.beanName, deltaTimeMilliseconds))
-
-        logger.debug("Bean {0}, self.invocationCount: {1}".format(self.beanName, self.invocationCount))
-        logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.beanName, responseJson["invocations"]))
-        self.invocationsSinceLastSample = responseJson["invocations"] - self.invocationCount
-        logger.debug("Bean {0}, invocationsSinceLastSample: {1}".format(self.beanName, self.invocationsSinceLastSample))
-
-        logger.debug("Bean {0}, self.executionTime: {1}".format(self.beanName, self.executionTime))
-        logger.debug(
-            "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.beanName, responseJson["execution-time"]))
-        self.executionTimeSinceLastSample = responseJson["execution-time"] - self.executionTime
-        logger.debug(
-            "Bean {0}, executionTimeSinceLastSample: {1}".format(self.beanName, self.executionTimeSinceLastSample))
-
-        if deltaTimeMilliseconds > 0:
-            # Calculate delta in pr. minute (millisecs / 60 / 1000)
-            self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
-            logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsPerSecond))
-            self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
-            logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionTimePerSecond))
+        if (self.executionTime == responseJson["execution-time"]) and (self.invocationCount == responseJson["invocations"]):
+            # No change in bean data, do not report - consider controlling this with an ENV var
+            self.reportToElasticsearch = False
         else:
-            self.invocationsPerSecond = 0
-            self.executionTimePerSecond = 0
+            self.reportToElasticsearch = True
 
-        self.executionTime = responseJson["execution-time"]
-        self.invocationCount = responseJson["invocations"]
+            deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
+            logger.debug("Bean {0}, deltaTime: {1} ms".format(self.beanName, deltaTimeMilliseconds))
+
+            logger.debug("Bean {0}, self.invocationCount: {1}".format(self.beanName, self.invocationCount))
+            logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.beanName, responseJson["invocations"]))
+            self.invocationsSinceLastSample = responseJson["invocations"] - self.invocationCount
+            logger.debug("Bean {0}, invocationsSinceLastSample: {1}".format(self.beanName, self.invocationsSinceLastSample))
+
+            logger.debug("Bean {0}, self.executionTime: {1}".format(self.beanName, self.executionTime))
+            logger.debug(
+                "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.beanName, responseJson["execution-time"]))
+            self.executionTimeSinceLastSample = responseJson["execution-time"] - self.executionTime
+            logger.debug(
+                "Bean {0}, executionTimeSinceLastSample: {1}".format(self.beanName, self.executionTimeSinceLastSample))
+
+            # TODO: Need to get the method stats here
+            
+
+
+            if deltaTimeMilliseconds > 0:
+                # Calculate delta in pr. minute (millisecs / 60 / 1000)
+                self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
+                logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsPerSecond))
+                self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
+                logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionTimePerSecond))
+            else:
+                self.invocationsPerSecond = 0
+                self.executionTimePerSecond = 0
+
+            self.executionTime = responseJson["execution-time"]
+            self.invocationCount = responseJson["invocations"]
 
         self.lastSampleTime = sampleTime
 
@@ -199,7 +224,7 @@ def updateBeanNames(beanMonitors):
         wildflyRequestCounter += 1
 
         responseJson = response.json()
-        logger.debug("Response json: {1}".format(url, responseJson))
+        logger.debug("Response json: {0}".format(responseJson))
         beanNames = responseJson['stateless-session-bean'].keys()
 
         logger.info("Found {0} beans to monitor".format(len(beanNames)))
@@ -235,7 +260,7 @@ def updateBeanStatistics(beanMonitor):
         wildflyRequestCounter += 1
 
         responseJson = response.json()
-        logger.debug("Response json: {1}".format(url, responseJson))
+        logger.info("Response json: {0}".format(responseJson))
 
         beanMonitor.updateStats(responseJson)
 
@@ -272,6 +297,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'timestamp': datetime.utcnow().isoformat("T", "milliseconds"),
             'wildfly-host-url': wildflyHostUrl,
             'monitor-name': monitorName,
+            "raw-json": beanMonitor.getLastResponse(),
         }
 
         logger.debug("Dispatching document to elasticsearch: {0}".format(doc))
@@ -308,7 +334,7 @@ def updateDeploymentUpStatus():
         wildflyRequestCounter += 1
 
         responseJson = response.json()
-        logger.debug("Response json: {1}".format(url, responseJson))
+        logger.debug("Response json: {0}".format(responseJson))
 
         # TODO: Store the result somewhere before dispatching to ES
 
@@ -436,7 +462,7 @@ def checkWildflyEjb3StatisticsEnabled():
         wildflyRequestCounter += 1
 
         responseJson = response.json()
-        logger.debug("Response json: {1}".format(url, responseJson))
+        logger.debug("Response json: {0}".format(responseJson))
 
         if 'enable-statistics' not in responseJson:
             logger.error(
@@ -490,7 +516,7 @@ def enableWildflyEjb3Statistics():
         if response.status_code == requests.codes.ok:
 
             responseJson = response.json()
-            logger.debug("Response json: {1}".format(url, responseJson))
+            logger.debug("Response json: {0}".format(responseJson))
 
             if "outcome" not in responseJson:
                 logger.error("Unable to enable the statistics logging for the ejb3 subsystem of the wildfly host. "
@@ -593,8 +619,12 @@ if __name__ == "__main__":
             for value in beanMonitors.values():
                 # Update the statistics for the bean
                 updateBeanStatistics(value)
-                # Dispatch the stats to elasticsearch for the bean
-                dispatchStatisticsToElasticSearch(value)
+
+                # Only dispatch the data if the bean stats were different
+                if value.shouldReportToElasticsearch():
+                    # Dispatch the stats to elasticsearch for the bean
+                    dispatchStatisticsToElasticSearch(value)
+
                 # Take a powernap, before doing the next bean poll
                 time.sleep(0.1)
 
