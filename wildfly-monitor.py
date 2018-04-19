@@ -274,7 +274,7 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'monitor-name': monitorName,
         }
 
-        logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
+        logger.debug("Dispatching document to elasticsearch: {0}".format(doc))
 
         res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
         logger.debug("Received response from elasticsearch: {0}".format(res))
@@ -590,7 +590,6 @@ if __name__ == "__main__":
             beanStatisticsCollectionStartTime = time.time()
 
             # Pull the bean status some stats
-            # TODO, handle the scenario where the ejb3 stats logging is not enabled on wildfly
             for value in beanMonitors.values():
                 # Update the statistics for the bean
                 updateBeanStatistics(value)
