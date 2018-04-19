@@ -52,9 +52,9 @@ wildflyHostUrl = (wildflyProtocol + '://' +
                   wildflyHost + ':' +
                   wildflyPort)
 
-wildflyBaseUrl = (wildflyHostUrl +
-                  '/management/deployment/' + wildflyDeployment +
-                  '/subdeployment/' + wildflySubDeployment)
+wildflyDeploymentUrl = (wildflyHostUrl +
+                        '/management/deployment/' + wildflyDeployment +
+                        '/subdeployment/' + wildflySubDeployment)
 
 # Retrieve the environment variables that should be set to configure the Elasticsearch endpoint we are reporting to
 esProtocol = os.getenv('ES_PROTOCOL', 'http')
@@ -142,9 +142,7 @@ class BeanMonitor(object):
         return self.executionsDelta
 
     def updateStats(self, responseJson):
-        # currentTimeInMilli = timestampMillisec64()
         sampleTime = datetime.utcnow()
-        # int(round(time.time() * 1000))
 
         if self.lastSampleTime == 0:
             self.lastSampleTime = sampleTime
@@ -180,7 +178,7 @@ class BeanMonitor(object):
 def updateBeanNames(beanMonitors):
     global wildflyRequestCounter
 
-    url = (wildflyBaseUrl +
+    url = (wildflyDeploymentUrl +
            "/subsystem/ejb3/stateless-session-bean/")
 
     logger.info("Updating all bean names")
@@ -217,7 +215,7 @@ def updateBeanStatistics(beanMonitor):
     global wildflyRequestCounter
 
     logger.debug("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
-    url = (wildflyBaseUrl +
+    url = (wildflyDeploymentUrl +
            "/subsystem/ejb3/stateless-session-bean/{0}/read-resource?include-runtime=true&recursive=true"
            .format(beanMonitor.getBeanName()))
 
@@ -287,8 +285,8 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 def updateDeploymentUpStatus():
     global wildflyRequestCounter
 
-    logger.debug("Getting server upstatus from {0}".format(wildflyBaseUrl))
-    url = (wildflyBaseUrl +
+    logger.debug("Getting server upstatus from {0}".format(wildflyDeploymentUrl))
+    url = (wildflyDeploymentUrl +
            '/management/deployment/' + wildflyDeployment +
            "/read-attribute?name=status")
 
@@ -303,6 +301,7 @@ def updateDeploymentUpStatus():
         logger.debug("Response json: {1}".format(url, responseJson))
 
         # TODO: Store the result somewhere before dispatching to ES
+
     except ConnectionError as conError:
         logger.error("A ConnectionError occurred when connecting to the wildfly host {0}".format(wildflyHostUrl),
                      conError)
@@ -315,7 +314,7 @@ def updateDeploymentUpStatus():
         time.sleep(errorSleepTime)
 
 
-def printRequestStatistics():
+def logRequestStatistics():
     global lastRequestStatsReportTime
 
     wildflyRequestAverage = (wildflyRequestCounter / (time.time() - scriptStartTime))
@@ -413,6 +412,46 @@ def waitForElasticsearchToBeUp():
             pass
 
 
+def checkWildflyEjb3StatisticsEnabled():
+    global wildflyRequestCounter
+
+    url = (wildflyHostUrl +
+           "/management/subsystem/ejb3")
+
+    try:
+        logger.debug("Requesting ejb3 subsystem properties from {0}".format(url))
+        response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.debug("Received response from {0}: {1}".format(url, response))
+
+        wildflyRequestCounter += 1
+
+        responseJson = response.json()
+        logger.debug("Response json: {1}".format(url, responseJson))
+
+        if 'enable-statistics' not in responseJson:
+            logger.error(
+                "Unable to determine if statistics logging is enabled for the ejb3 subsystem of the wildfly host {0}. "
+                "Tried the url {1}, but did not get the expected result. Was expecting the json key "
+                "'enable-statistics', but got this result back: {2}".format(wildflyHostUrl, url, responseJson))
+            return False
+
+        elif responseJson["enable-statistics"]:
+            return True
+        elif not responseJson["enable-statistics"]:
+            return False
+        else:
+            logger.error("Unable to determine if the statistics logging is enabled for the ejb3 subsystem of the "
+                         "wildfly host {0}. The returned response to the request to {1}, did not contain an expected "
+                         "true/false value for the json key 'enable-statistics', the response json was {2}".format(
+                wildflyHostUrl, url, responseJson))
+            return False
+
+    except Exception as exception:
+        logger.error(
+            "An error occurred while requesting the ejb3 subsystem attributes at {0}, unable to determine if ejb3 "
+            "statistics are enabled".format(url), exception)
+        return False
+
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
 logger.info("Shipping statistics to {0}".format(esHostUrl))
@@ -425,6 +464,8 @@ if __name__ == "__main__":
     # Need to check that the wildfly instance and elasticsearch instances are available
     waitForWildflyToBeUp()
     waitForElasticsearchToBeUp()
+
+    checkWildflyEjb3StatisticsEnabled()
 
     try:
         while True:
@@ -453,7 +494,7 @@ if __name__ == "__main__":
 
             # Report request stats every 5 minutes
             if (time.time() - lastRequestStatsReportTime) > 300:
-                printRequestStatistics()
+                logRequestStatistics()
 
             # Take a nap before doing the next full poll cycle
             time.sleep(5)
