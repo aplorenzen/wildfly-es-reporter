@@ -66,7 +66,7 @@ esProtocol = os.getenv('ES_PROTOCOL', 'http')
 esHost = os.getenv('ES_HOST', 'localhost')
 esPort = os.getenv('ES_PORT', '9200')
 esIndex = os.getenv('ES_INDEX', 'etel')
-esDocType = os.getenv('ES_DOCTYPE', 'stats')
+esDocType = os.getenv('ES_DOCTYPE', 'bean-stats')
 
 # Compose the target Wildfly mangement HTTP endpoint that we are targeting
 esHostUrl = (esProtocol + '://' +
@@ -112,8 +112,8 @@ class BeanMonitor(object):
         self.invocationCount = 0
         self.invocationsSinceLastSample = 0
         self.executionTimeSinceLastSample = 0
-        self.invocationsDelta = 0
-        self.executionsDelta = 0
+        self.invocationsPerSecond = 0
+        self.executionTimePerSecond = 0
         self.lastSampleTime = 0
 
     def getExecutionTime(self):
@@ -140,11 +140,11 @@ class BeanMonitor(object):
     def getExecutionTimeSinceLastSample(self):
         return self.executionTimeSinceLastSample
 
-    def getInvocationsPrSecond(self):
-        return self.invocationsDelta
+    def getInvocationsPerSecond(self):
+        return self.invocationsPerSecond
 
-    def getExecutionsPrSecond(self):
-        return self.executionsDelta
+    def getExecutionsPerSecond(self):
+        return self.executionTimePerSecond
 
     def updateStats(self, responseJson):
         sampleTime = datetime.utcnow()
@@ -169,13 +169,13 @@ class BeanMonitor(object):
 
         if deltaTimeMilliseconds > 0:
             # Calculate delta in pr. minute (millisecs / 60 / 1000)
-            self.invocationsDelta = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 60 / 1000)
-            logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsDelta))
-            self.executionsDelta = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 60 / 1000)
-            logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionsDelta))
+            self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
+            logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsPerSecond))
+            self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
+            logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionTimePerSecond))
         else:
-            self.invocationsDelta = 0
-            self.executionsDelta = 0
+            self.invocationsPerSecond = 0
+            self.executionTimePerSecond = 0
 
         self.executionTime = responseJson["execution-time"]
         self.invocationCount = responseJson["invocations"]
@@ -264,12 +264,14 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
             'beanName': beanMonitor.getBeanName(),
             'invocations': beanMonitor.getInvocationCount(),
             'invocations-since-last-sample': beanMonitor.getInvocationsSinceLastSample(),
-            'invocations-pr-second': beanMonitor.getInvocationsPrSecond(),
+            'invocations-per-second': beanMonitor.getInvocationsPrSecond(),
             'execution-time': beanMonitor.getExecutionTime(),
             'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
-            'executions-pr-second': beanMonitor.getExecutionsPrSecond(),
+            'execution-time-per-second': beanMonitor.getExecutionsPrSecond(),
             'sample-time': beanMonitor.getLastSampleTime().isoformat("T", "milliseconds"),
             'timestamp': datetime.utcnow().isoformat("T", "milliseconds"),
+            'wildfly-host-url': wildflyHostUrl,
+            'monitor-name': monitorName,
         }
 
         logger.debug("Dispaching document to elasticsearch: {0}".format(doc))
