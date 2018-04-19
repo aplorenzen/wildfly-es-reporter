@@ -241,7 +241,7 @@ def updateBeanStatistics(beanMonitor):
     except Exception as exception:
         logger.error(
             "An error occurred when retrieving bean statistics for the bean {0}, from the wildfly host {1}".format(
-                beanMonitor.getBeanName(), wildflyHostUrl), conError)
+                beanMonitor.getBeanName(), wildflyHostUrl), exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
         time.sleep(errorSleepTime)
 
@@ -436,8 +436,10 @@ def checkWildflyEjb3StatisticsEnabled():
             return False
 
         elif responseJson["enable-statistics"]:
+            logger.debug("Statistics logging for the ejb3 subsystem of the host {0} is enabled".format(wildflyHostUrl))
             return True
         elif not responseJson["enable-statistics"]:
+            logger.debug("Statistics logging for the ejb3 subsystem of the host {0} is NOT enabled".format(wildflyHostUrl))
             return False
         else:
             logger.error("Unable to determine if the statistics logging is enabled for the ejb3 subsystem of the "
@@ -452,6 +454,92 @@ def checkWildflyEjb3StatisticsEnabled():
             "statistics are enabled".format(url), exception)
         return False
 
+
+def enableWildflyEjb3Statistics():
+    global wildflyRequestCounter
+
+    url = (wildflyHostUrl +
+           "/management")
+
+    body = {
+        "operation": "write-attribute",
+        "name": "enable-statistics",
+        "value": "true",
+        "address": ["subsystem", "ejb3"],
+        "json.pretty": 1
+    }
+
+    try:
+        logger.debug("Attempting to enable the statistics logging for the ejb3 subsystem of the wildfly host, with "
+                     "url {0} and HTTP post body {1}".format(url, body))
+        response = requests.post(url, json=body, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.debug("Received response from {0}: {1}".format(url, response))
+        wildflyRequestCounter += 1
+
+        if response.status_code == requests.codes.ok:
+
+            responseJson = response.json()
+            logger.debug("Response json: {1}".format(url, responseJson))
+
+            if "outcome" not in responseJson:
+                logger.error("Unable to enable the statistics logging for the ejb3 subsystem of the wildfly host. "
+                             "Request url was {0}, body was {1}, the request returned a unexpected response {2}"
+                             .format(url, body, responseJson))
+                return False
+            else:
+                if responseJson["outcome"] == "success":
+                    logger.debug("Sucessfully enabled the statistics logging for the ejb3 subsystem of the wildfly host")
+                    return True
+                else:
+                    logger.error("Unable to enable the statistics logging for the ejb3 subsystem of the wildfly host. "
+                                 "Request url was {0}, body was {1}, the request returned a unexpected response {2}"
+                                 .format(url, body, responseJson))
+                    return False
+        else:
+            logger.error("Unable to enable the statistics logging for the ejb3 subsystem of the wildfly host. Request "
+                         "url was {0}, body was {1}, the request returned a HTTP statuscode {2}, was expecting {3}"
+                         .format(url, body, response.status_code, requests.codes.ok))
+            return False
+
+    except Exception as exception:
+        logger.error("An exception occurred when attempting to enable the ejb3 subsystem statistics logging for the "
+                     "wildfly host, with the url {0} and HTTP post body {1}".format(url, body), exception)
+        return False
+
+
+def disableWildflyEjb3Statistics():
+    global wildflyRequestCounter
+
+    url = (wildflyHostUrl +
+           "/management")
+
+    body = {
+        "operation": "write-attribute",
+        "name":"enable-statistics",
+        "value": "false",
+        "address": ["subsystem", "ejb3"],
+        "json.pretty": 1
+    }
+
+    # TODO: Refactor with error messages
+
+    try:
+        response = requests.post(url, json=body, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+
+        wildflyRequestCounter += 1
+
+        responseJson = response.json()
+
+        print(responseJson)
+
+    # '{"outcome" : "success"}'
+
+
+    except Exception as exception:
+        logger.error("Exception!", exception)
+
+
+
 # Start the main script here
 logger.info("Starting monitoring of {0}".format(wildflyHostUrl))
 logger.info("Shipping statistics to {0}".format(esHostUrl))
@@ -465,7 +553,19 @@ if __name__ == "__main__":
     waitForWildflyToBeUp()
     waitForElasticsearchToBeUp()
 
-    checkWildflyEjb3StatisticsEnabled()
+    logger.info("Checking if the statistics logging for the ejb3 subsystem of the host {0} "
+                "is enabled".format(wildflyHostUrl))
+
+    if not checkWildflyEjb3StatisticsEnabled():
+        logger.info("The ejb3 subsystem for the wildfly host does not have statistics enabled, attempting to enable it")
+        if not enableWildflyEjb3Statistics():
+            logger.error("Was not able to enable to wildfly ejb3 subsystem statistics logging for the host {0}, "
+                         "exitting!".format(wildflyHostUrl))
+            sys.exit(1)
+        else:
+            logger.info("Sucessfully enabled the ejb3 subsystem logging for the wildfly host")
+    else:
+        logger.info("Statistics logging for the ejb3 subsystem is enabled, continuing")
 
     try:
         while True:
@@ -507,6 +607,9 @@ if __name__ == "__main__":
         logger.error("The exception: ", exception)
         sys.exit(0)
     finally:
+        # TODO: Perhaps consider turning off the metrics logging on exit, controlled by an ENV var?
+        # disableWildflyEjb3Statistics()
+
         scriptEndTime = time.time()
         logger.info("Exiting...")
         logger.info("Uptime was {0}".format(getUptime()))
