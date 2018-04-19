@@ -1,5 +1,5 @@
-# TODO: Need to add method level logging here, think of a good solution
-
+# TODO: Downgrade logging to the TRACE level
+# TODO: Update the monitor so that it does not have to send updates when there are not changes in the beans
 
 from datetime import datetime
 import signal
@@ -377,8 +377,8 @@ def waitForWildflyToBeUp():
 
             if not wildflyUp:
                 logger.warning(
-                    "Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url,
-                                                                                                           upstatusCheckSleepTime))
+                    "Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(
+                        url, upstatusCheckSleepTime))
                 time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
@@ -449,7 +449,8 @@ def checkWildflyEjb3StatisticsEnabled():
             logger.debug("Statistics logging for the ejb3 subsystem of the host {0} is enabled".format(wildflyHostUrl))
             return True
         elif not responseJson["enable-statistics"]:
-            logger.debug("Statistics logging for the ejb3 subsystem of the host {0} is NOT enabled".format(wildflyHostUrl))
+            logger.debug(
+                "Statistics logging for the ejb3 subsystem of the host {0} is NOT enabled".format(wildflyHostUrl))
             return False
         else:
             logger.error("Unable to determine if the statistics logging is enabled for the ejb3 subsystem of the "
@@ -498,7 +499,8 @@ def enableWildflyEjb3Statistics():
                 return False
             else:
                 if responseJson["outcome"] == "success":
-                    logger.debug("Sucessfully enabled the statistics logging for the ejb3 subsystem of the wildfly host")
+                    logger.debug(
+                        "Sucessfully enabled the statistics logging for the ejb3 subsystem of the wildfly host")
                     return True
                 else:
                     logger.error("Unable to enable the statistics logging for the ejb3 subsystem of the wildfly host. "
@@ -525,7 +527,7 @@ def disableWildflyEjb3Statistics():
 
     body = {
         "operation": "write-attribute",
-        "name":"enable-statistics",
+        "name": "enable-statistics",
         "value": "false",
         "address": ["subsystem", "ejb3"],
         "json.pretty": 1
@@ -544,10 +546,8 @@ def disableWildflyEjb3Statistics():
 
     # '{"outcome" : "success"}'
 
-
     except Exception as exception:
         logger.error("Exception!", exception)
-
 
 
 # Start the main script here
