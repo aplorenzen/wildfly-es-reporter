@@ -15,6 +15,11 @@ monitorName = os.getenv("MONITOR_NAME", "wildfly-monitor")
 
 # From: https://docs.python.org/3/howto/logging-cookbook.html
 logger = logging.getLogger(monitorName)
+
+# Introduce TRACE logging level
+TRACE = 5
+
+logging.addLevelName(TRACE, "TRACE")
 logLevelString = os.getenv('LOG_LEVEL', 'INFO')
 
 logLevel = logging.getLevelName(logLevelString)
@@ -171,6 +176,9 @@ class BeanMonitor(object):
         else:
             self.invocationsDelta = 0
             self.executionsDelta = 0
+
+        self.executionTime = responseJson["execution-time"]
+        self.invocationCount = responseJson["invocations"]
 
         self.lastSampleTime = sampleTime
 
