@@ -1,3 +1,6 @@
+# TODO: Need to add method level logging here, think of a good solution
+
+
 from datetime import datetime
 import signal
 import logging
@@ -34,7 +37,6 @@ scriptStartTime = time.time()
 lastBeanNameUpdateTime = 0
 # Set last stats reports time to be 5 minutes in the future
 lastRequestStatsReportTime = 0  # time.time()
-
 
 # Retrieve the environment variables that should be set to configure the Wildfly endpoint to monitor
 wildflyProtocol = os.getenv('WILDFLY_PROTOCOL', 'http')
@@ -201,14 +203,13 @@ def updateBeanNames(beanMonitors):
                 beanMonitors[key] = BeanMonitor(key)
 
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl))
+        logger.error("A ConnectionError occurred when connecting to the host {0}".format(wildflyHostUrl), conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl),
+                     exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
@@ -232,21 +233,18 @@ def updateBeanStatistics(beanMonitor):
 
         beanMonitor.updateStats(responseJson)
 
-        # TODO: Need to add method level logging here, think of a good solution
 
     except ConnectionError as conError:
         logger.error(
             "A ConnectionError occurred when getting bean statistics for {0}, connecting to the host {1}".format(
-                beanMonitor.getBeanName(), wildflyHostUrl))
+                beanMonitor.getBeanName(), wildflyHostUrl), conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error(
             "An error occurred when retrieving bean statistics for the bean {0}, from the wildfly host {1}".format(
-                beanMonitor.getBeanName(), wildflyHostUrl))
+                beanMonitor.getBeanName(), wildflyHostUrl), conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
@@ -276,14 +274,13 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
         esRequestCounter += 1
 
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl))
+        logger.error("A ConnectionError occurred when connecting to the elasticsearch host {0}".format(esHostUrl),
+                     conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when pushing statistics to elasticsearch at {0}".format(esHostUrl))
+        logger.error("An error occurred when pushing statistics to elasticsearch at {0}".format(esHostUrl), exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
@@ -307,14 +304,14 @@ def updateDeploymentUpStatus():
 
         # TODO: Store the result somewhere before dispatching to ES
     except ConnectionError as conError:
-        logger.error("A ConnectionError occurred when connecting to the wildfly host {0}".format(wildflyHostUrl))
+        logger.error("A ConnectionError occurred when connecting to the wildfly host {0}".format(wildflyHostUrl),
+                     conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The error: ", conError)
         time.sleep(errorSleepTime)
     except Exception as exception:
-        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl))
+        logger.error("An error occurred when retrieving the beans to monitor from the host {0}".format(wildflyHostUrl),
+                     exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
-        logger.error("The exception: ", exception)
         time.sleep(errorSleepTime)
 
 
@@ -370,11 +367,14 @@ def waitForWildflyToBeUp():
                 logger.info("Wildfly instance at {0} is ready".format(wildflyHostUrl))
 
             if not wildflyUp:
-                logger.warning("Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url, upstatusCheckSleepTime))
+                logger.warning(
+                    "Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url,
+                                                                                                           upstatusCheckSleepTime))
                 time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
-            logger.warning("Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(url, upstatusCheckSleepTime))
+            logger.warning("Was not able to reach the wildfly instance at {0}, napping for {1} seconds...".format(
+                url, upstatusCheckSleepTime))
             time.sleep(upstatusCheckSleepTime)
             pass
 
@@ -400,11 +400,15 @@ def waitForElasticsearchToBeUp():
             #    logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
 
             if not elasticsearchUp:
-                logger.warning("Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl, upstatusCheckSleepTime))
+                logger.warning(
+                    "Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(
+                        esHostUrl, upstatusCheckSleepTime))
                 time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
-            logger.warning("Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl, upstatusCheckSleepTime))
+            logger.warning(
+                "Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl,
+                                                                                                             upstatusCheckSleepTime))
             time.sleep(upstatusCheckSleepTime)
             pass
 
