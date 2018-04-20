@@ -98,12 +98,14 @@ esRequestCounter = 0
 # Set up method to handle exit signal
 def sigint_handler(signal, frame):
     logger.info("Received SIGINT, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    logger.info("Uptime was {0}".format(getUptime()))
     disableWildflyEjb3Statistics()
     sys.exit(0)
 
 
 def sigterm_handler(signal, frame):
     logger.info("Received SIGTERM, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    logger.info("Uptime was {0}".format(getUptime()))
     disableWildflyEjb3Statistics()
     sys.exit(0)
 
@@ -117,8 +119,9 @@ class MethodMonitor(Monitor):
     def beanMonitor(self):
         return self._beanMonitor
 
+
 # BeanMonitor is the class that we will use for holding information about a bean
-#   that we are monitoring.
+# that we are monitoring.
 class BeanMonitor(Monitor):
     def __init__(self, beanName):
         super(BeanMonitor, self).__init__(beanName)
@@ -238,26 +241,37 @@ def dispatchStatsToElasticsearch(index, jsondoc, doc_type):
 def dispatchBeanStatsToElasticsearch(beanMonitor):
     logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
 
-    beanStats = beanMonitor.getMonitorStats(prefix="bean-")
-    beanStats["bean-name"] = beanMonitor.name
-    beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
-    beanStats["wildfly-host-url"] = wildflyHostUrl
-    beanStats["monitor-name"] = monitorName
+    try:
+        beanStats = beanMonitor.getMonitorStats(prefix="bean-")
+        beanStats["bean-name"] = beanMonitor.name
+        beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
+        beanStats["wildfly-host-url"] = wildflyHostUrl
+        beanStats["monitor-name"] = monitorName
 
-    dispatchStatsToElasticsearch(esIndex, beanStats, esDocType)
+        dispatchStatsToElasticsearch(esIndex, beanStats, esDocType)
+
+    except Exception as exception:
+        logger.error("An error occurred when composing bean stats json for elasticsearch", exception)
+        logger.info("Sleeping {0}...".format(errorSleepTime))
+        time.sleep(errorSleepTime)
 
 
 def dispatchMethodStatsToElasticSearch(methodMonitor):
     logger.debug("Sending statistics for the method {0}".format(methodMonitor.name))
 
-    methodStats = method.getMonitorStats(prefix="method-")
-    methodStats["method-name"] = methodMonitor.name
-    methodStats["bean-name"] = methodMonitor.beanMonitor.name
-    methodStats["sample-time"] = methodMonitor.beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
-    methodStats["wildfly-host-url"] = wildflyHostUrl
-    methodStats["monitor-name"] = monitorName
+    try:
+        methodStats = method.getMonitorStats(prefix="method-")
+        methodStats["method-name"] = methodMonitor.name
+        methodStats["bean-name"] = methodMonitor.beanMonitor.name
+        methodStats["sample-time"] = methodMonitor.beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
+        methodStats["wildfly-host-url"] = wildflyHostUrl
+        methodStats["monitor-name"] = monitorName
 
-    dispatchStatsToElasticsearch(esIndex, methodStats, esDocType)
+        dispatchStatsToElasticsearch(esIndex, methodStats, esDocType)
+    except Exception as exception:
+        logger.error("An error occurred when composing method stats json for elasticsearch", exception)
+        logger.info("Sleeping {0}...".format(errorSleepTime))
+        time.sleep(errorSleepTime)
 
 
 def updateDeploymentUpStatus():
@@ -581,15 +595,15 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         logger.info("Script interrupted by keyboard, exiting...")
+        logger.info("Uptime was {0}".format(getUptime()))
         sys.exit(0)
     except Exception as exception:
         logger.info("Exception in the main loop, exiting...")
+        logger.info("Uptime was {0}".format(getUptime()))
         logger.error("The exception: ", exception)
-        sys.exit(0)
+        sys.exit(1)
     finally:
-        # TODO: Perhaps consider turning off the metrics logging on exit, controlled by an ENV var?
         disableWildflyEjb3Statistics()
-
         scriptEndTime = time.time()
         logger.info("Exiting...")
         logger.info("Uptime was {0}".format(getUptime()))
