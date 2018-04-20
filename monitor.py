@@ -196,7 +196,7 @@ class Monitor(object):
             'wait-time': self._waitTime,
             'wait-time-since-last-sample': self._waitTimeSinceLastSample,
             'wait-time-per-second': self._waitTimePerSecond,
-            "raw-json": self._lastResponse
+            # "raw-json": self._lastResponse
         }
 
         return jsondoc

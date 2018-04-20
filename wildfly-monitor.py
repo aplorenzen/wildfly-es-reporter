@@ -218,23 +218,23 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 
     logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
 
-    methodList = {}
+    methodList = []
 
     for method in beanMonitor.methods.values():
         if method.reportToElasticsearch:
             methodStats = method.getMonitorStats()
-            methodStats["bean-name"] = beanMonitor.name
+            # methodStats["bean-name"] = beanMonitor.name
             methodStats["method-name"] = method.name
-            methodList[method.name] = methodStats
+            methodList.append(methodStats)
 
     try:
         beanStats = beanMonitor.getMonitorStats()
         beanStats["bean-name"] = beanMonitor.name
         beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
-        beanStats["timestamp"] = datetime.utcnow().isoformat("T", "milliseconds")
+        # beanStats["timestamp"] = datetime.utcnow().isoformat("T", "milliseconds")
         beanStats["wildfly-host-url"] = wildflyHostUrl
         beanStats["monitor-name"] = monitorName
-        beanStats["raw-json"] = beanMonitor.lastResponse
+        # beanStats["raw-json"] = beanMonitor.lastResponse
 
         if len(methodList) > 0:
             beanStats["methods"] = methodList
