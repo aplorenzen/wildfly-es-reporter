@@ -1,3 +1,4 @@
+# TODO; Update the try catch around the functions called in the main loop. some errors escape and extir the program!
 # TODO; Write README.md
 # TODO: Write header in this file
 # TODO: Add wait-time to the tracked stats
@@ -108,8 +109,11 @@ def sigterm_handler(signal, frame):
 class MethodMonitor(Monitor):
     def __init__(self, beanMonitor, methodName):
         super(MethodMonitor, self).__init__(methodName)
-        self.beanMonitor = beanMonitor
+        self._beanMonitor = beanMonitor
 
+    @property
+    def beanMonitor(self):
+        return self._beanMonitor
 
 # BeanMonitor is the class that we will use for holding information about a bean
 #   that we are monitoring.
@@ -208,33 +212,13 @@ def updateBeanStatistics(beanMonitor):
         time.sleep(errorSleepTime)
 
 
-def dispatchStatisticsToElasticSearch(beanMonitor):
+def dispatchStatsToElasticsearch(index, jsondoc, doc_type):
     global esRequestCounter
 
-    logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
-
-    methodList = []
-
-    for method in beanMonitor.methods.values():
-        if method.reportToElasticsearch:
-            methodStats = method.getMonitorStats()
-            methodStats["method-name"] = method.name
-            methodList.append(methodStats)
-
     try:
-        beanStats = beanMonitor.getMonitorStats()
-        beanStats["bean-name"] = beanMonitor.name
-        beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
-        beanStats["wildfly-host-url"] = wildflyHostUrl
-        beanStats["monitor-name"] = monitorName
-
-        if len(methodList) > 0:
-            beanStats["methods"] = methodList
-
-        logger.debug("Dispatching document to elasticsearch: {0}".format(beanStats))
-
-        res = esClient.index(index=esIndex, doc_type=esDocType, body=beanStats)
-        logger.debug("Received response from elasticsearch: {0}".format(res))
+        logger.log(TRACE, "Dispatching document to elasticsearch: {0}".format(jsondoc))
+        res = esClient.index(index=index, doc_type=doc_type, body=jsondoc)
+        logger.log(TRACE, "Received response from elasticsearch: {0}".format(res))
 
         esRequestCounter += 1
 
@@ -247,6 +231,31 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
         logger.error("An error occurred when pushing statistics to elasticsearch at {0}".format(esHostUrl), exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
         time.sleep(errorSleepTime)
+
+
+def dispatchBeanStatsToElasticsearch(beanMonitor):
+    logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
+
+    beanStats = beanMonitor.getMonitorStats()
+    beanStats["bean-name"] = beanMonitor.name
+    beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
+    beanStats["wildfly-host-url"] = wildflyHostUrl
+    beanStats["monitor-name"] = monitorName
+
+    dispatchStatsToElasticsearch(esIndex, beanStats, esDocType)
+
+
+def dispatchMethodStatsToElasticSearch(methodMonitor):
+    logger.debug("Sending statistics for the method {0}".format(methodMonitor.name))
+
+    methodStats = method.getMonitorStats()
+    methodStats["method-name"] = methodMonitor.name
+    methodStats["bean-name"] = methodMonitor.beanMonitor.name
+    methodStats["sample-time"] = methodMonitor.beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
+    methodStats["wildfly-host-url"] = wildflyHostUrl
+    methodStats["monitor-name"] = monitorName
+
+    dispatchStatsToElasticsearch(esIndex, methodStats, esDocType)
 
 
 def updateDeploymentUpStatus():
@@ -549,7 +558,11 @@ if __name__ == "__main__":
                 # Only dispatch the data if the bean stats were different
                 if beanMonitor.reportToElasticsearch:
                     # Dispatch the stats to elasticsearch for the bean
-                    dispatchStatisticsToElasticSearch(beanMonitor)
+                    dispatchBeanStatsToElasticsearch(beanMonitor)
+
+                    for method in beanMonitor.methods.values():
+                        if method.reportToElasticsearch:
+                            dispatchMethodStatsToElasticSearch(method)
 
                 # Take a powernap, before doing the next bean poll
                 time.sleep(0.1)
