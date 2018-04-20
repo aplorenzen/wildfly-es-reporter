@@ -1,3 +1,7 @@
+# TODO; Write README.md
+# TODO: Write header in this file
+# TODO: Add wait-time to the tracked stats
+# TODO: If the number of retrieved beans is 0, then look for them again
 # TODO: Downgrade logging to the TRACE level
 # DONE: Update the monitor so that it does not have to send updates when there are not changes in the beans
 # TODO: Update the monitor to report methodlevel stats
@@ -11,6 +15,9 @@ from requests.auth import HTTPDigestAuth
 import os
 import sys
 from elasticsearch import Elasticsearch
+import json
+
+from monitor import Monitor
 
 monitorName = os.getenv("MONITOR_NAME", "wildfly-monitor")
 
@@ -99,113 +106,39 @@ def sigterm_handler(signal, frame):
     sys.exit(0)
 
 
-def timestampMillisec64():
-    return int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+class MethodMonitor(Monitor):
+    def __init__(self, beanMonitor, methodName):
+        super(MethodMonitor, self).__init__(methodName)
+        self.beanMonitor = beanMonitor
 
 
 # BeanMonitor is the class that we will use for holding information about a bean
 #   that we are monitoring.
-class BeanMonitor(object):
+class BeanMonitor(Monitor):
     def __init__(self, beanName):
-        self.beanName = beanName
-        self.executionTime = 0
-        self.invocationCount = 0
-        self.invocationsSinceLastSample = 0
-        self.executionTimeSinceLastSample = 0
-        self.invocationsPerSecond = 0
-        self.executionTimePerSecond = 0
-        self.lastSampleTime = 0
-        self.reportToElasticsearch = False
-        self.lastResponse = ""
+        super(BeanMonitor, self).__init__(beanName)
+        self._methods = dict()
 
-    def getExecutionTime(self):
-        return self.executionTime
+    @property
+    def methods(self):
+        return self._methods
 
-    def setExecutionTime(self, value):
-        self.executionTime = value;
+    def updateStats(self, responseJson, sampleTime):
+        super(BeanMonitor, self).updateStats(responseJson, sampleTime)
 
-    def getInvocationCount(self):
-        return self.invocationCount
-
-    def setInvocationCount(self, value):
-        self.invocationCount = value
-
-    def getBeanName(self):
-        return self.beanName
-
-    def getLastSampleTime(self):
-        return self.lastSampleTime
-
-    def getInvocationsSinceLastSample(self):
-        return self.invocationsSinceLastSample
-
-    def getExecutionTimeSinceLastSample(self):
-        return self.executionTimeSinceLastSample
-
-    def getInvocationsPerSecond(self):
-        return self.invocationsPerSecond
-
-    def getExecutionsPerSecond(self):
-        return self.executionTimePerSecond
-
-    def shouldReportToElasticsearch(self):
-        return self.reportToElasticsearch
-
-    def getLastResponse(self):
-        return self.lastResponse
-
-    def updateStats(self, responseJson):
-        sampleTime = datetime.utcnow()
-
-        self.lastResponse = responseJson
-
-        # If we are in the first pass for this bean, do not calc the avareges and so on
-        if self.lastSampleTime == 0:
-            self.reportToElasticsearch = True
-            self.lastSampleTime = sampleTime
-            self.executionTime = responseJson["execution-time"]
-            self.invocationCount = responseJson["invocations"]
-            return
-
-        if (self.executionTime == responseJson["execution-time"]) and (self.invocationCount == responseJson["invocations"]):
-            # No change in bean data, do not report - consider controlling this with an ENV var
-            self.reportToElasticsearch = False
+        if "methods" not in responseJson:
+            # No methods have been invoked for the bean in question
+            pass
         else:
-            self.reportToElasticsearch = True
+            # Loop thoguh the methods in the json
+            # Add them to a dict inside the BeanMonitor
+            # Esentually repeat what is done for the bean itself, for each method, stats and so on
+            for methodName, methodStats in responseJson["methods"].items():
 
-            deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
-            logger.debug("Bean {0}, deltaTime: {1} ms".format(self.beanName, deltaTimeMilliseconds))
+                if methodName not in self.methods:
+                    self.methods[methodName] = MethodMonitor(self, methodName)
 
-            logger.debug("Bean {0}, self.invocationCount: {1}".format(self.beanName, self.invocationCount))
-            logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.beanName, responseJson["invocations"]))
-            self.invocationsSinceLastSample = responseJson["invocations"] - self.invocationCount
-            logger.debug("Bean {0}, invocationsSinceLastSample: {1}".format(self.beanName, self.invocationsSinceLastSample))
-
-            logger.debug("Bean {0}, self.executionTime: {1}".format(self.beanName, self.executionTime))
-            logger.debug(
-                "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.beanName, responseJson["execution-time"]))
-            self.executionTimeSinceLastSample = responseJson["execution-time"] - self.executionTime
-            logger.debug(
-                "Bean {0}, executionTimeSinceLastSample: {1}".format(self.beanName, self.executionTimeSinceLastSample))
-
-            # TODO: Need to get the method stats here
-            
-
-
-            if deltaTimeMilliseconds > 0:
-                # Calculate delta in pr. minute (millisecs / 60 / 1000)
-                self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
-                logger.debug("Bean {0}, invocationsDelta: {1}".format(self.beanName, self.invocationsPerSecond))
-                self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
-                logger.debug("Bean {0}, executionsDelta: {1}".format(self.beanName, self.executionTimePerSecond))
-            else:
-                self.invocationsPerSecond = 0
-                self.executionTimePerSecond = 0
-
-            self.executionTime = responseJson["execution-time"]
-            self.invocationCount = responseJson["invocations"]
-
-        self.lastSampleTime = sampleTime
+                self.methods[methodName].updateStats(methodStats, sampleTime)
 
 
 def updateBeanNames(beanMonitors):
@@ -247,34 +180,35 @@ def updateBeanNames(beanMonitors):
 def updateBeanStatistics(beanMonitor):
     global wildflyRequestCounter
 
-    logger.debug("Getting statistics for the bean {0}".format(beanMonitor.getBeanName()))
+    logger.debug("Getting statistics for the bean {0}".format(beanMonitor.name))
     url = (wildflyDeploymentUrl +
            "/subsystem/ejb3/stateless-session-bean/{0}/read-resource?include-runtime=true&recursive=true"
-           .format(beanMonitor.getBeanName()))
+           .format(beanMonitor.name))
 
     try:
         logger.debug("Requesting bean statistics from {0}".format(url))
         response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        sampleTime = datetime.utcnow()
         logger.debug("Received response from {0}: {1}".format(url, response))
 
         wildflyRequestCounter += 1
 
         responseJson = response.json()
-        logger.info("Response json: {0}".format(responseJson))
+        logger.debug("Response json: {0}".format(responseJson))
 
-        beanMonitor.updateStats(responseJson)
+        beanMonitor.updateStats(responseJson, sampleTime)
 
 
     except ConnectionError as conError:
         logger.error(
             "A ConnectionError occurred when getting bean statistics for {0}, connecting to the host {1}".format(
-                beanMonitor.getBeanName(), wildflyHostUrl), conError)
+                beanMonitor.name, wildflyHostUrl), conError)
         logger.info("Sleeping {0}...".format(errorSleepTime))
         time.sleep(errorSleepTime)
     except Exception as exception:
         logger.error(
             "An error occurred when retrieving bean statistics for the bean {0}, from the wildfly host {1}".format(
-                beanMonitor.getBeanName(), wildflyHostUrl), exception)
+                beanMonitor.name, wildflyHostUrl), exception)
         logger.info("Sleeping {0}...".format(errorSleepTime))
         time.sleep(errorSleepTime)
 
@@ -282,27 +216,31 @@ def updateBeanStatistics(beanMonitor):
 def dispatchStatisticsToElasticSearch(beanMonitor):
     global esRequestCounter
 
-    logger.debug("Sending statistics for the bean {0}".format(beanMonitor.getBeanName()))
+    logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
+
+    methodList = {}
+
+    for method in beanMonitor.methods.values():
+        if method.reportToElasticsearch:
+            methodStats = method.getMonitorStats()
+            methodStats["bean-name"] = beanMonitor.name
+            methodStats["method-name"] = method.name
+            methodList[method.name] = methodStats
 
     try:
-        doc = {
-            'beanName': beanMonitor.getBeanName(),
-            'invocations': beanMonitor.getInvocationCount(),
-            'invocations-since-last-sample': beanMonitor.getInvocationsSinceLastSample(),
-            'invocations-per-second': beanMonitor.getInvocationsPerSecond(),
-            'execution-time': beanMonitor.getExecutionTime(),
-            'execution-time-since-last-sample': beanMonitor.getExecutionTimeSinceLastSample(),
-            'execution-time-per-second': beanMonitor.getExecutionsPerSecond(),
-            'sample-time': beanMonitor.getLastSampleTime().isoformat("T", "milliseconds"),
-            'timestamp': datetime.utcnow().isoformat("T", "milliseconds"),
-            'wildfly-host-url': wildflyHostUrl,
-            'monitor-name': monitorName,
-            "raw-json": beanMonitor.getLastResponse(),
-        }
+        beanStats = beanMonitor.getMonitorStats()
+        beanStats["bean-name"] = beanMonitor.name
+        beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
+        beanStats["timestamp"] = datetime.utcnow().isoformat("T", "milliseconds")
+        beanStats["wildfly-host-url"] = wildflyHostUrl
+        beanStats["monitor-name"] = monitorName
+        beanStats["raw-json"] = beanMonitor.lastResponse
 
-        logger.debug("Dispatching document to elasticsearch: {0}".format(doc))
+        if len(methodList) > 0:
+            beanStats["methods"] = methodList
+            logger.info("Dispatching document to elasticsearch: {0}".format(beanStats))
 
-        res = esClient.index(index=esIndex, doc_type=esDocType, body=doc)
+        res = esClient.index(index=esIndex, doc_type=esDocType, body=beanStats)
         logger.debug("Received response from elasticsearch: {0}".format(res))
 
         esRequestCounter += 1
@@ -430,10 +368,6 @@ def waitForElasticsearchToBeUp():
                 elasticsearchUp = True
                 logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
 
-            # if esClient.ping:
-            #    elasticsearchUp = True
-            #    logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
-
             if not elasticsearchUp:
                 logger.warning(
                     "Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(
@@ -441,9 +375,8 @@ def waitForElasticsearchToBeUp():
                 time.sleep(upstatusCheckSleepTime)
 
         except Exception as exception:
-            logger.warning(
-                "Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds...".format(esHostUrl,
-                                                                                                             upstatusCheckSleepTime))
+            logger.warning("Was not able to reach the elasticsearch instance at {0}, napping for {1} seconds..."
+                           .format(esHostUrl, upstatusCheckSleepTime))
             time.sleep(upstatusCheckSleepTime)
             pass
 
@@ -616,14 +549,14 @@ if __name__ == "__main__":
             beanStatisticsCollectionStartTime = time.time()
 
             # Pull the bean status some stats
-            for value in beanMonitors.values():
+            for beanMonitor in beanMonitors.values():
                 # Update the statistics for the bean
-                updateBeanStatistics(value)
+                updateBeanStatistics(beanMonitor)
 
                 # Only dispatch the data if the bean stats were different
-                if value.shouldReportToElasticsearch():
+                if beanMonitor.reportToElasticsearch:
                     # Dispatch the stats to elasticsearch for the bean
-                    dispatchStatisticsToElasticSearch(value)
+                    dispatchStatisticsToElasticSearch(beanMonitor)
 
                 # Take a powernap, before doing the next bean poll
                 time.sleep(0.1)
