@@ -236,7 +236,7 @@ def dispatchStatsToElasticsearch(index, jsondoc, doc_type):
 def dispatchBeanStatsToElasticsearch(beanMonitor):
     logger.debug("Sending statistics for the bean {0}".format(beanMonitor.name))
 
-    beanStats = beanMonitor.getMonitorStats()
+    beanStats = beanMonitor.getMonitorStats(prefix="bean-")
     beanStats["bean-name"] = beanMonitor.name
     beanStats["sample-time"] = beanMonitor.lastSampleTime.isoformat("T", "milliseconds")
     beanStats["wildfly-host-url"] = wildflyHostUrl
@@ -248,7 +248,7 @@ def dispatchBeanStatsToElasticsearch(beanMonitor):
 def dispatchMethodStatsToElasticSearch(methodMonitor):
     logger.debug("Sending statistics for the method {0}".format(methodMonitor.name))
 
-    methodStats = method.getMonitorStats()
+    methodStats = method.getMonitorStats(prefix="method-")
     methodStats["method-name"] = methodMonitor.name
     methodStats["bean-name"] = methodMonitor.beanMonitor.name
     methodStats["sample-time"] = methodMonitor.beanMonitor.lastSampleTime.isoformat("T", "milliseconds")

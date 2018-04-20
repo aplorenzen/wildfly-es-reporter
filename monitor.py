@@ -188,17 +188,17 @@ class Monitor(object):
         self.waitTime = waitTime
         self.lastSampleTime = sampleTime
 
-    def getMonitorStats(self):
+    def getMonitorStats(self, prefix=""):
         jsondoc = {
-            "invocations": self._invocationCount,
-            "invocations-since-last-sample": self._invocationsSinceLastSample,
-            "invocations-per-second": self._invocationsPerSecond,
-            "execution-time": self._executionTime,
-            "execution-time-since-last-sample": self._executionTimeSinceLastSample,
-            "execution-time-per-second": self._executionTimePerSecond,
-            "wait-time": self._waitTime,
-            "wait-time-since-last-sample": self._waitTimeSinceLastSample,
-            "wait-time-per-second": self._waitTimePerSecond
+            prefix + "invocations": self._invocationCount,
+            prefix + "invocations-since-last-sample": self._invocationsSinceLastSample,
+            prefix + "invocations-per-second": self._invocationsPerSecond,
+            prefix + "execution-time": self._executionTime,
+            prefix + "execution-time-since-last-sample": self._executionTimeSinceLastSample,
+            prefix + "execution-time-per-second": self._executionTimePerSecond,
+            prefix + "wait-time": self._waitTime,
+            prefix + "wait-time-since-last-sample": self._waitTimeSinceLastSample,
+            prefix + "wait-time-per-second": self._waitTimePerSecond
         }
 
         if reportRawJson:
