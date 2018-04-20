@@ -98,11 +98,13 @@ esRequestCounter = 0
 # Set up method to handle exit signal
 def sigint_handler(signal, frame):
     logger.info("Received SIGINT, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    disableWildflyEjb3Statistics()
     sys.exit(0)
 
 
 def sigterm_handler(signal, frame):
     logger.info("Received SIGTERM, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    disableWildflyEjb3Statistics()
     sys.exit(0)
 
 
@@ -586,7 +588,7 @@ if __name__ == "__main__":
         sys.exit(0)
     finally:
         # TODO: Perhaps consider turning off the metrics logging on exit, controlled by an ENV var?
-        # disableWildflyEjb3Statistics()
+        disableWildflyEjb3Statistics()
 
         scriptEndTime = time.time()
         logger.info("Exiting...")
