@@ -15,7 +15,6 @@ from requests.auth import HTTPDigestAuth
 import os
 import sys
 from elasticsearch import Elasticsearch
-import json
 
 from monitor import Monitor
 
@@ -130,11 +129,7 @@ class BeanMonitor(Monitor):
             # No methods have been invoked for the bean in question
             pass
         else:
-            # Loop thoguh the methods in the json
-            # Add them to a dict inside the BeanMonitor
-            # Esentually repeat what is done for the bean itself, for each method, stats and so on
             for methodName, methodStats in responseJson["methods"].items():
-
                 if methodName not in self.methods:
                     self.methods[methodName] = MethodMonitor(self, methodName)
 
@@ -235,7 +230,8 @@ def dispatchStatisticsToElasticSearch(beanMonitor):
 
         if len(methodList) > 0:
             beanStats["methods"] = methodList
-            logger.info("Dispatching document to elasticsearch: {0}".format(beanStats))
+
+        logger.debug("Dispatching document to elasticsearch: {0}".format(beanStats))
 
         res = esClient.index(index=esIndex, doc_type=esDocType, body=beanStats)
         logger.debug("Received response from elasticsearch: {0}".format(res))
