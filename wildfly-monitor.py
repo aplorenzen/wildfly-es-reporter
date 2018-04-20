@@ -1,4 +1,4 @@
-# TODO; 50% Update the try catch around the functions called in the main loop. some errors escape and exti the program!
+# TODO; 50% Update the try catch around the functions called in the main loop. some errors escape and exit the program!
 # TODO; Write README.md
 # TODO: Write header in this file
 # TODO: Add wait-time to the tracked stats
