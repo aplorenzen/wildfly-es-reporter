@@ -1,11 +1,11 @@
-# TODO; Update the try catch around the functions called in the main loop. some errors escape and extir the program!
+# TODO; 50% Update the try catch around the functions called in the main loop. some errors escape and exti the program!
 # TODO; Write README.md
 # TODO: Write header in this file
 # TODO: Add wait-time to the tracked stats
 # TODO: If the number of retrieved beans is 0, then look for them again
-# TODO: Downgrade logging to the TRACE level
+# TODO: Downgrade logging to the TRACE level in some places, go through
 # DONE: Update the monitor so that it does not have to send updates when there are not changes in the beans
-# TODO: Update the monitor to report methodlevel stats
+# DONE: Update the monitor to report methodlevel stats
 
 from datetime import datetime
 import signal
@@ -58,6 +58,7 @@ wildflyDeployment = os.getenv('WILDFLY_DEPLOYMENT', 'etel.ear')
 wildflySubDeployment = os.getenv('WILDFLY_SUBDEPLOYMENT', 'etel-ejb-1.0-SNAPSHOT.jar')
 wildflyUser = os.getenv('WILDFLY_USER', 'etel')
 wildflyPassword = os.getenv('WILDFLY_PASS', 'etel')
+wildflyDisableStatsTrackingOnExit = os.getenv('WILDFLY_DISABLE_EJB3_TRACKING_ON_EXIT', "True")
 
 # Compose the target Wildfly mangement HTTP endpoint that we are targeting
 wildflyHostUrl = (wildflyProtocol + '://' +
@@ -97,16 +98,17 @@ esRequestCounter = 0
 
 # Set up method to handle exit signal
 def sigint_handler(signal, frame):
-    logger.info("Received SIGINT, exiting. Signal: {0} Frame: {1}".format(signal, frame))
-    logger.info("Uptime was {0}".format(getUptime()))
-    disableWildflyEjb3Statistics()
+    logger.info("Received SIGINT, exiting...")
     sys.exit(0)
 
 
 def sigterm_handler(signal, frame):
-    logger.info("Received SIGTERM, exiting. Signal: {0} Frame: {1}".format(signal, frame))
+    logger.info("Received SIGTERM, exiting...")
+    if (wildflyDisableStatsTrackingOnExit == "True") or (wildflyDisableStatsTrackingOnExit == "1") or (
+            wildflyDisableStatsTrackingOnExit == "Yes"):
+        disableWildflyEjb3Statistics()
+    logRequestStatistics()
     logger.info("Uptime was {0}".format(getUptime()))
-    disableWildflyEjb3Statistics()
     sys.exit(0)
 
 
@@ -346,16 +348,18 @@ def waitForWildflyToBeUp():
            "/management/deployment/" + wildflyDeployment +
            "/read-attribute?name=status")
 
+    logger.info("Waiting for wildfly instance at {0} to be available".format(wildflyHostUrl))
+
     while not wildflyUp:
         try:
-            logger.info("Waiting for wildfly instance at {0} to be available".format(wildflyHostUrl))
+
             logger.debug("Requesting status from {0}".format(url))
 
             response = requests.get(url, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
 
             if response.status_code == requests.codes.ok:
                 wildflyUp = True
-                logger.info("Wildfly instance at {0} is ready".format(wildflyHostUrl))
+                logger.info("Wildfly instance is ready")
 
             if not wildflyUp:
                 logger.warning(
@@ -375,16 +379,16 @@ def waitForElasticsearchToBeUp():
 
     url = (esHostUrl + "/?pretty")
 
+    logger.info("Waiting for elasticseach instance at {0} to be available".format(esHostUrl))
+
     while not elasticsearchUp:
         try:
-            logger.info("Waiting for elasticseach instance at {0} to be available".format(esHostUrl))
-
             logger.debug("Requesting status from {0}".format(url))
             response = requests.get(url)
 
             if response.status_code == requests.codes.ok:
                 elasticsearchUp = True
-                logger.info("Elasticsearch instance at {0} is ready".format(esHostUrl))
+                logger.info("Elasticsearch instance at is ready".format(esHostUrl))
 
             if not elasticsearchUp:
                 logger.warning(
@@ -510,21 +514,44 @@ def disableWildflyEjb3Statistics():
         "json.pretty": 1
     }
 
-    # TODO: Refactor with error messages
-
     try:
-        response = requests.post(url, json=body, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
+        logger.info("Disabling the statistics logging for the ejb3 subsystem on the wildfly host")
 
+        logger.debug("Attempting to disnable the statistics logging for the ejb3 subsystem of the wildfly host, with "
+                     "url {0} and HTTP post body {1}".format(url, body))
+        response = requests.post(url, json=body, auth=HTTPDigestAuth(wildflyUser, wildflyPassword))
         wildflyRequestCounter += 1
 
-        responseJson = response.json()
+        if response.status_code == requests.codes.ok:
 
-        print(responseJson)
+            responseJson = response.json()
+            logger.debug("Response json: {0}".format(responseJson))
 
-    # '{"outcome" : "success"}'
+            if "outcome" not in responseJson:
+                logger.error("Unable to disable the statistics logging for the ejb3 subsystem of the wildfly host. "
+                             "Request url was {0}, body was {1}, the request returned a unexpected response {2}"
+                             .format(url, body, responseJson))
+                return False
+            else:
+                if responseJson["outcome"] == "success":
+                    logger.debug(
+                        "Sucessfully disabled the statistics logging for the ejb3 subsystem of the wildfly host")
+                    return True
+                else:
+                    logger.error("Unable to disable the statistics logging for the ejb3 subsystem of the wildfly host. "
+                                 "Request url was {0}, body was {1}, the request returned a unexpected response {2}"
+                                 .format(url, body, responseJson))
+                    return False
+        else:
+            logger.error("Unable to disable the statistics logging for the ejb3 subsystem of the wildfly host. Request "
+                         "url was {0}, body was {1}, the request returned a HTTP statuscode {2}, was expecting {3}"
+                         .format(url, body, response.status_code, requests.codes.ok))
+            return False
 
     except Exception as exception:
-        logger.error("Exception!", exception)
+        logger.error("An exception occurred when attempting to disable the ejb3 subsystem statistics logging for the "
+                     "wildfly host, with the url {0} and HTTP post body {1}".format(url, body), exception)
+        return False
 
 
 # Start the main script here
@@ -540,7 +567,7 @@ if __name__ == "__main__":
     waitForWildflyToBeUp()
     waitForElasticsearchToBeUp()
 
-    logger.info("Checking if the statistics logging for the ejb3 subsystem of the host {0} "
+    logger.info("Checking if the statistics logging for the ejb3 subsystem of the wildfly host "
                 "is enabled".format(wildflyHostUrl))
 
     if not checkWildflyEjb3StatisticsEnabled():
@@ -580,8 +607,8 @@ if __name__ == "__main__":
                         if method.reportToElasticsearch:
                             dispatchMethodStatsToElasticSearch(method)
 
-                # Take a powernap, before doing the next bean poll
-                time.sleep(0.1)
+                    # Take a powernap, before doing the next bean poll
+                    time.sleep(0.1)
 
             logger.info("Collected statistics for {0} beans in {1}".format(len(beanMonitors), getMinutesAndSecondsDiff(
                 beanStatisticsCollectionStartTime, time.time())))
@@ -593,17 +620,11 @@ if __name__ == "__main__":
             # Take a nap before doing the next full poll cycle
             time.sleep(5)
 
-    except KeyboardInterrupt:
-        logger.info("Script interrupted by keyboard, exiting...")
-        logger.info("Uptime was {0}".format(getUptime()))
-        sys.exit(0)
     except Exception as exception:
-        logger.info("Exception in the main loop, exiting...")
-        logger.info("Uptime was {0}".format(getUptime()))
-        logger.error("The exception: ", exception)
-        sys.exit(1)
+        logger.error("Exception in the main loop, exiting...", exception)
     finally:
-        disableWildflyEjb3Statistics()
-        scriptEndTime = time.time()
-        logger.info("Exiting...")
+        if (wildflyDisableStatsTrackingOnExit == "True") or (wildflyDisableStatsTrackingOnExit == "1") or (
+                wildflyDisableStatsTrackingOnExit == "Yes"):
+            disableWildflyEjb3Statistics()
+        logRequestStatistics()
         logger.info("Uptime was {0}".format(getUptime()))
