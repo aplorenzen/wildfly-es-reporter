@@ -1,5 +1,8 @@
+import os
+import json
 import logging
 
+reportRawJson = os.getenv("REPORT_RAW", False)
 
 class Monitor(object):
     def __init__(self, name, loggerName="wmon"):
@@ -187,16 +190,18 @@ class Monitor(object):
 
     def getMonitorStats(self):
         jsondoc = {
-            'invocations': self._invocationCount,
-            'invocations-since-last-sample': self._invocationsSinceLastSample,
-            'invocations-per-second': self._invocationsPerSecond,
-            'execution-time': self._executionTime,
-            'execution-time-since-last-sample': self._executionTimeSinceLastSample,
-            'execution-time-per-second': self._executionTimePerSecond,
-            'wait-time': self._waitTime,
-            'wait-time-since-last-sample': self._waitTimeSinceLastSample,
-            'wait-time-per-second': self._waitTimePerSecond,
-            # "raw-json": self._lastResponse
+            "invocations": self._invocationCount,
+            "invocations-since-last-sample": self._invocationsSinceLastSample,
+            "invocations-per-second": self._invocationsPerSecond,
+            "execution-time": self._executionTime,
+            "execution-time-since-last-sample": self._executionTimeSinceLastSample,
+            "execution-time-per-second": self._executionTimePerSecond,
+            "wait-time": self._waitTime,
+            "wait-time-since-last-sample": self._waitTimeSinceLastSample,
+            "wait-time-per-second": self._waitTimePerSecond
         }
+
+        if reportRawJson:
+            jsondoc["raw-json"] = json.dumps(self._lastResponse)
 
         return jsondoc
