@@ -607,8 +607,8 @@ if __name__ == "__main__":
                         if method.reportToElasticsearch:
                             dispatchMethodStatsToElasticSearch(method)
 
-                    # Take a powernap, before doing the next bean poll
-                    time.sleep(0.1)
+                # Take a powernap, before doing the next bean poll
+                time.sleep(0.1)
 
             logger.info("Collected statistics for {0} beans in {1}".format(len(beanMonitors), getMinutesAndSecondsDiff(
                 beanStatisticsCollectionStartTime, time.time())))
