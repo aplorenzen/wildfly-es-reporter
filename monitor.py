@@ -4,6 +4,7 @@ import logging
 
 reportRawJson = os.getenv("REPORT_RAW", False)
 
+
 class Monitor(object):
     def __init__(self, name, loggerName="wmon"):
         self.logger = logging.getLogger(loggerName + "." + name)
@@ -22,6 +23,8 @@ class Monitor(object):
         self._waitTimePerSecond = 0
         self._reportToElasticsearch = False
         self._lastResponse = ""
+
+        self._activityOnLastSample = False
 
     @property
     def name(self):
@@ -127,6 +130,14 @@ class Monitor(object):
     def lastResponse(self, value):
         self._lastResponse = value
 
+    @property
+    def activityOnLastSample(self):
+        return self._activityOnLastSample
+
+    @activityOnLastSample.setter
+    def activityOnLastSample(self, value):
+        self._activityOnLastSample = value
+
     def updateStats(self, responseJson, sampleTime):
         self._lastResponse = responseJson
 
@@ -147,11 +158,22 @@ class Monitor(object):
         # If we are in the first pass for this bean, do not calc the avareges and so on
         if self.lastSampleTime == 0:
             self.reportToElasticsearch = True
+            self.activityOnLastSample = False
         else:
             if (self.executionTime == executionTime) and (self.invocationCount == invocationCount) and (
                     self.waitTime == waitTime):
-                # No change in bean data, do not report - consider controlling this with an ENV var
-                self.reportToElasticsearch = False
+                # TODO: No change in bean data, do not report - consider controlling this with an ENV var
+
+                # Last data point was reported, this data point is identical - we will report this one aswell, with the
+                # zero activity that it has had. This is in order to drop the stats that are charted in Kibana to "0"
+                if self.activityOnLastSample:
+                    self._calculateStats(executionTime, invocationCount, waitTime, sampleTime)
+                    self.reportToElasticsearch = True
+                else:
+                    self.reportToElasticsearch = False
+
+                self.activityOnLastSample = False
+
             elif (self.executionTime > executionTime) or (self.invocationCount > invocationCount) or (
                     self.waitTime > waitTime):
                 # This is the scenario is when a wildfly instance restarts. The counters will go back down.
@@ -164,53 +186,53 @@ class Monitor(object):
                 self.executionTimePerSecond = 0
                 self.waitTimeSinceLastSample = 0
                 self.waitTimePerSecond = 0
+                self.activityOnLastSample = True
 
             else:
                 self.reportToElasticsearch = True
+                self.activityOnLastSample = True
 
-                deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
-                self.logger.debug("Bean {0}, deltaTime: {1} ms".format(self.name, deltaTimeMilliseconds))
-
-                # invocations stats
-                self.logger.debug("Bean {0}, self.invocationCount: {1}".format(self.name, self.invocationCount))
-                self.logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.name, invocationCount))
-                self.invocationsSinceLastSample = invocationCount - self.invocationCount
-                self.logger.debug(
-                    "Bean {0}, invocationsSinceLastSample: {1}".format(self.name, self.invocationsSinceLastSample))
-
-                # execution time stats
-                self.logger.debug("Bean {0}, self.executionTime: {1}".format(self.name, self.executionTime))
-                self.logger.debug(
-                    "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.name, executionTime))
-                self.executionTimeSinceLastSample = executionTime - self.executionTime
-                self.logger.debug(
-                    "Bean {0}, executionTimeSinceLastSample: {1}".format(self.name, self.executionTimeSinceLastSample))
-
-                # wait time stats
-                self.logger.debug("Bean {0}, self.waitTime: {1}".format(self.name, self.waitTime))
-                self.logger.debug("Bean {0}, responseJson[\"wait-time\"]: {1}".format(self.name, waitTime))
-                self.waitTimeSinceLastSample = waitTime - self.waitTime
-                self.logger.debug(
-                    "Bean {0}, waitTimeSinceLastSample: {1}".format(self.name, self.waitTimeSinceLastSample))
-
-
-                if deltaTimeMilliseconds > 0:
-                    # Calculate delta in pr. minute (millisecs / 60 / 1000)
-                    self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
-                    self.logger.debug("Bean {0}, invocationsDelta: {1}".format(self.name, self.invocationsPerSecond))
-                    self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
-                    self.logger.debug("Bean {0}, executionsDelta: {1}".format(self.name, self.executionTimePerSecond))
-                    self.waitTimePerSecond = self._waitTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
-                    self.logger.debug("Bean {0}, waitTimeDelta: {1}".format(self.name, self.waitTimePerSecond))
-                else:
-                    self.invocationsPerSecond = 0
-                    self.executionTimePerSecond = 0
-                    self.waitTimePerSecond = 0
+                self._calculateStats(executionTime, invocationCount, sampleTime, waitTime)
 
         self.executionTime = executionTime
         self.invocationCount = invocationCount
         self.waitTime = waitTime
         self.lastSampleTime = sampleTime
+
+    def _calculateStats(self, executionTime, invocationCount, waitTime, sampleTime):
+        deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
+        self.logger.debug("Bean {0}, deltaTime: {1} ms".format(self.name, deltaTimeMilliseconds))
+        # invocations stats
+        self.logger.debug("Bean {0}, self.invocationCount: {1}".format(self.name, self.invocationCount))
+        self.logger.debug("Bean {0}, responseJson[\"invocations\"]: {1}".format(self.name, invocationCount))
+        self.invocationsSinceLastSample = invocationCount - self.invocationCount
+        self.logger.debug(
+            "Bean {0}, invocationsSinceLastSample: {1}".format(self.name, self.invocationsSinceLastSample))
+        # execution time stats
+        self.logger.debug("Bean {0}, self.executionTime: {1}".format(self.name, self.executionTime))
+        self.logger.debug(
+            "Bean {0}, responseJson[\"execution-time\"]: {1}".format(self.name, executionTime))
+        self.executionTimeSinceLastSample = executionTime - self.executionTime
+        self.logger.debug(
+            "Bean {0}, executionTimeSinceLastSample: {1}".format(self.name, self.executionTimeSinceLastSample))
+        # wait time stats
+        self.logger.debug("Bean {0}, self.waitTime: {1}".format(self.name, self.waitTime))
+        self.logger.debug("Bean {0}, responseJson[\"wait-time\"]: {1}".format(self.name, waitTime))
+        self.waitTimeSinceLastSample = waitTime - self.waitTime
+        self.logger.debug(
+            "Bean {0}, waitTimeSinceLastSample: {1}".format(self.name, self.waitTimeSinceLastSample))
+        if deltaTimeMilliseconds > 0:
+            # Calculate delta in pr. minute (millisecs / 60 / 1000)
+            self.invocationsPerSecond = self.invocationsSinceLastSample / (deltaTimeMilliseconds / 1000)
+            self.logger.debug("Bean {0}, invocationsDelta: {1}".format(self.name, self.invocationsPerSecond))
+            self.executionTimePerSecond = self.executionTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
+            self.logger.debug("Bean {0}, executionsDelta: {1}".format(self.name, self.executionTimePerSecond))
+            self.waitTimePerSecond = self._waitTimeSinceLastSample / (deltaTimeMilliseconds / 1000)
+            self.logger.debug("Bean {0}, waitTimeDelta: {1}".format(self.name, self.waitTimePerSecond))
+        else:
+            self.invocationsPerSecond = 0
+            self.executionTimePerSecond = 0
+            self.waitTimePerSecond = 0
 
     def getMonitorStats(self, prefix=""):
         jsondoc = {
