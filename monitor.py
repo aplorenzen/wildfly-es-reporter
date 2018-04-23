@@ -192,7 +192,7 @@ class Monitor(object):
             else:
                 self.reportToElasticsearch = True
                 self.activityOnLastSample = True
-                self._calculateStats(executionTime, invocationCount, sampleTime, waitTime)
+                self._calculateStats(executionTime, invocationCount, waitTime, sampleTime)
 
         self.executionTime = executionTime
         self.invocationCount = invocationCount
@@ -200,7 +200,9 @@ class Monitor(object):
         self.lastSampleTime = sampleTime
 
     def _calculateStats(self, executionTime, invocationCount, waitTime, sampleTime):
-        deltaTimeMilliseconds = int((datetime(sampleTime) - datetime(self.lastSampleTime)).total_seconds() * 1000)
+
+        deltaTimeMilliseconds = int((sampleTime - self.lastSampleTime).total_seconds() * 1000)
+
         self.logger.debug("Bean {0}, deltaTime: {1} ms".format(self.name, deltaTimeMilliseconds))
         # invocations stats
         self.logger.debug("Bean {0}, self.invocationCount: {1}".format(self.name, self.invocationCount))
