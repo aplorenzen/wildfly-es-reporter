@@ -180,6 +180,7 @@ class Monitor(object):
                 # This is the scenario is when a wildfly instance restarts. The counters will go back down.
                 # We could mark a restart here!
                 self.reportToElasticsearch = True
+                self.activityOnLastSample = True
                 # Reset all stats
                 self.invocationsSinceLastSample = 0
                 self.invocationsPerSecond = 0
@@ -187,8 +188,6 @@ class Monitor(object):
                 self.executionTimePerSecond = 0
                 self.waitTimeSinceLastSample = 0
                 self.waitTimePerSecond = 0
-                self.activityOnLastSample = True
-
             else:
                 self.reportToElasticsearch = True
                 self.activityOnLastSample = True
