@@ -1,0 +1,84 @@
+version: "2.1"
+
+services:
+
+  wildfly-mon-kongsberg:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-kongsberg-preprod
+    environment:
+      - WILDFLY_PORT=8090
+      - DOCTYPE=kongsberg
+
+  wildfly-mon-drammen:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-drammen-preprod
+    environment:
+      - WILDFLY_PORT=9090
+      - DOCTYPE=drammen
+
+  wildfly-mon-tcdanmark:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-tcdanmark-preprod
+    environment:
+      - WILDFLY_PORT=10090
+      - DOCTYPE=tcdanmark
+  
+  wildfly-mon-ssp-cph:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-ssp-cph-preprod
+    environment:
+      - WILDFLY_PORT=16090
+      - DOCTYPE=ssp-cph
+  
+  wildfly-mon-ssp-osl:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-ssp-osl-preprod
+    environment:
+      - WILDFLY_PORT=13090
+      - DOCTYPE=ssp-osl
+
+  wildfly-mon-tcsverige:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-tcsverige-preprod
+    environment:
+      - WILDFLY_PORT=11090
+      - DOCTYPE=tcsverige
+
+  wildfly-mon-walkinmalmoe:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-walkinmalmoe-preprod
+    environment:
+      - WILDFLY_PORT=15090
+      - DOCTYPE=walkinmalmoe
+
+  wildfly-mon-xkoebenhavn:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-xkoebenhavn-preprod
+    environment:
+      - WILDFLY_PORT=12090
+      - DOCTYPE=xkoebenhavn
+
+  wildfly-mon-xmalmoe:
+    extends:
+      file: docker-compose-base.yml
+      service: wildfly-monitor-preprod
+    container_name: wildfly-mon-xmalmoe-preprod
+    environment:
+      - WILDFLY_PORT=14090
+      - DOCTYPE=xmalmoe

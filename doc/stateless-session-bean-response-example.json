@@ -1,0 +1,32 @@
+{
+    "outcome" => "success",
+    "result" => {
+        "component-class-name" => "BlogEntryDaoBean",
+        "declared-roles" => [],
+        "execution-time" => 364L,
+        "invocations" => 16L,
+        "methods" => {
+            "persist" => {
+                "execution-time" => 16L,
+                "invocations" => 15L,
+                "wait-time" => 0L
+            },
+            "findAll" => {
+                "execution-time" => 348L,
+                "invocations" => 1L,
+                "wait-time" => 0L
+            }
+        },
+        "peak-concurrent-invocations" => 1L,
+        "pool-available-count" => 20,
+        "pool-create-count" => 1,
+        "pool-current-size" => 1,
+        "pool-max-size" => 20,
+        "pool-name" => "slsb-strict-max-pool",
+        "pool-remove-count" => 0,
+        "run-as-role" => undefined,
+        "security-domain" => "other",
+        "timers" => [],
+        "wait-time" => 0L
+    }
+}
